@@ -1,0 +1,73 @@
+name: Publish BetterChatGPT v1.1 pre-release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-v1.1-pre.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: 05988515d2c8618382640b61d28036092fac5b51
+      TAG: v1.1-pre.1
+    steps:
+      - name: Check out clean release target
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TARGET_SHA }}
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts
+          sha256sum -c SHA256SUMS.txt
+          unzip -t BetterChatGPT-chromium-v1.1.zip >/dev/null
+          unzip -t BetterChatGPT-firefox-v1.1.xpi >/dev/null
+          unzip -l BetterChatGPT-firefox-v1.1.xpi | grep -q 'META-INF/mozilla.rsa'
+
+      - name: Publish GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/release-notes.md <<'EOF'
+          ## BetterChatGPT v1.1 — pre-release
+
+          This is the first v1.1 pre-release for broader testing before marking the release stable.
+
+          ### Highlights
+          - Remembers Pinned, Projects, and Chats sidebar expansion state.
+          - Double-click a project to invoke ChatGPT's native **Project home** action.
+          - Adds cross-device stale-chat protection to prevent follow-ups from an outdated conversation tail.
+          - Adds the low-overhead **Native hang recorder** for severe ChatGPT/tool-call UI freezes.
+          - Retains **Queued send** while leaving uploads to ChatGPT's native implementation.
+          - Updates **Classic dark gray** to the current ChatGPT desktop dark palette.
+          - Removes obsolete **Live uploads while generating**, **Focus composer**, and **Long-chat optimizer** code.
+          - Adds a Mozilla-signed Firefox build from the same v1.1 runtime.
+
+          ### Packages
+          - `BetterChatGPT-chromium-v1.1.zip` — Edge / Chrome; extract and load unpacked.
+          - `BetterChatGPT-firefox-v1.1.xpi` — Mozilla-signed Firefox XPI (unlisted AMO distribution).
+          - `SHA256SUMS.txt` — SHA-256 checksums for both packages.
+
+          ### Pre-release testing focus
+          The newest resilience features depend on ChatGPT's frequently changing client behavior. In particular, feedback is useful around cross-device chat resync, sidebar persistence, project double-click behavior, queued sending, and native tool-call/UI hangs.
+          EOF
+
+          gh release create "$TAG" \
+            artifacts/BetterChatGPT-chromium-v1.1.zip \
+            artifacts/BetterChatGPT-firefox-v1.1.xpi \
+            artifacts/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "BetterChatGPT v1.1 (Pre-release)" \
+            --notes-file /tmp/release-notes.md \
+            --prerelease
