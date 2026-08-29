@@ -45,14 +45,18 @@ jobs:
           bash /tmp/refine-pr1.sh
           python3 <<'PY'
           from pathlib import Path
-          import re
+
           p = Path('chromium/content.js')
           text = p.read_text(encoding='utf-8')
-          text = text.replace('        setTimeout(() => location.reload(), 120);\n', '')
-          pattern = r'(else if \(command === "bcg:toggle-tab"\) \{\n\s+setTabDisabled\(!isTabDisabled\(\)\);\n)(?!\s+dispatchSettingsChanged)'
-          text, count = re.subn(pattern, r'\1        dispatchSettingsChanged("tab-disabled");\n', text, count=1)
-          if count != 1:
-              raise RuntimeError(f'expected one live tab-toggle patch, got {count}')
+          old = '''    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");
+    setTimeout(() => location.reload(), 120);
+'''
+          new = '''    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");
+    dispatchSettingsChanged("tab-disabled");
+'''
+          if text.count(old) != 1:
+              raise RuntimeError(f'expected one reload-based setTabDisabled body, found {text.count(old)}')
+          text = text.replace(old, new, 1)
           if 'setTimeout(() => location.reload(), 120);' in text:
               raise RuntimeError('forced 120ms reload remains')
           p.write_text(text, encoding='utf-8')
