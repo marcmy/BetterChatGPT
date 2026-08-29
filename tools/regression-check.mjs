@@ -4,6 +4,8 @@ const content = fs.readFileSync("chromium/content.js", "utf8");
 const bridge = fs.readFileSync("chromium/page-bridge.js", "utf8");
 const manifest = JSON.parse(fs.readFileSync("chromium/manifest.json", "utf8"));
 const firefoxBuilder = fs.readFileSync("tools/build-firefox.mjs", "utf8");
+const guard = fs.readFileSync("chromium/performance-guard.js", "utf8");
+const perfBackground = fs.readFileSync("chromium/performance-background.js", "utf8");
 
 function requireText(haystack, needle, label) {
   if (!haystack.includes(needle)) throw new Error(`Missing regression guard: ${label}`);
@@ -16,6 +18,19 @@ if (manifest.version !== "1.1.2" || manifest.version_name !== "1.1-pre.2") {
   throw new Error(`Unexpected Chromium version metadata: ${manifest.version} / ${manifest.version_name}`);
 }
 requireText(content, 'const VERSION = "1.1-pre.2";', "runtime pre.2 version");
+requireText(content, 'nativeToolFreezeGuard: true', "native tool freeze guard default");
+requireText(content, 'setting("advanced.nativeToolFreezeGuard", "Native tool freeze guard"', "native tool freeze guard setting");
+requireText(content, 'nativeToolFreezeGuard: apiObject.nativeToolFreezeGuard?.status?.() || null', "guard diagnostics");
+forbidText(content, 'setTimeout(() => location.reload(), 120);', "popup master toggle forced reload");
+requireText(guard, 'const HEAVY_TOOL_THRESHOLD = 4;', "adaptive guard heavy threshold");
+requireText(guard, 'IntersectionObserver', "offscreen-only guard observer");
+requireText(guard, 'nearViewport.get(tool) === false', "only offscreen tool surfaces are skipped");
+requireText(guard, 'protectedTailSet()', "active tail turns stay rendered");
+forbidText(guard, 'contain: layout style;', "broad tool layout containment");
+requireText(perfBackground, 'const MAX_HEARTBEATS = 12;', "hang recorder heartbeat runway");
+requireText(perfBackground, 'recentHeartbeats', "persist heartbeat runway");
+requireText(perfBackground, 'guardSkippedTools', "persist guard state in heartbeat runway");
+if (!manifest.content_scripts?.some((entry) => entry.js?.includes('performance-guard.js'))) throw new Error('performance-guard.js is not packaged');
 requireText(content, 'setManagedStyle(node, "color", "LinkText")', "user-bubble links stay blue");
 requireText(content, 'node.closest(\'a[href], [role="link"]\')', "link descendants excluded from bubble text color");
 requireText(content, 'return FIELD_BY_PATH.has(path) || path.startsWith("ui.");', "regular settings are live");

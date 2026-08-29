@@ -84,6 +84,7 @@
       debug: false,
       notifications: true,
       performanceHangRecorder: true,
+      nativeToolFreezeGuard: true,
     },
   });
 
@@ -248,6 +249,7 @@
     merged.advanced.debug = Boolean(merged.advanced.debug);
     merged.advanced.notifications = Boolean(merged.advanced.notifications);
     merged.advanced.performanceHangRecorder = Boolean(merged.advanced.performanceHangRecorder);
+    merged.advanced.nativeToolFreezeGuard = Boolean(merged.advanced.nativeToolFreezeGuard);
     return merged;
   }
 
@@ -487,8 +489,8 @@
     } catch {
       // Ignore private-mode storage failures.
     }
-    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");
-    setTimeout(() => location.reload(), 120);
+    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");
+    dispatchSettingsChanged("tab-disabled");
   }
 
   function isFeatureEnabled(path) {
@@ -598,6 +600,7 @@
       needsReload: document.documentElement.dataset.bcgNeedsReload === "1",
       browserSync: syncStatus,
       performanceHangRecorder: Boolean(settings.advanced.performanceHangRecorder),
+      nativeToolFreezeGuard: Boolean(settings.advanced.nativeToolFreezeGuard),
     };
   }
 
@@ -624,6 +627,7 @@
       },
       queueRuntime: typeof apiObject.queueDiagnostics === "function" ? clone(apiObject.queueDiagnostics()) : null,
       performance: apiObject.performanceDiagnostics?.getReport?.() || null,
+      nativeToolFreezeGuard: apiObject.nativeToolFreezeGuard?.status?.() || null,
       recentErrors: clone(diagnostics),
       bridgeTrace: clone(bridgeTrace),
     };
@@ -941,6 +945,7 @@
           fields: [
             setting("advanced.notifications", "Notifications", "checkbox", "Show Better ChatGPT status toasts."),
             setting("advanced.performanceHangRecorder", "Native hang recorder", "checkbox", "Record low-overhead timing, memory, DOM-count, and long-frame diagnostics for ChatGPT freezes. Stays active when Master enable is off so the native UI can be tested without Better ChatGPT features."),
+            setting("advanced.nativeToolFreezeGuard", "Native tool freeze guard", "checkbox", "Reduce renderer work from offscreen conversation/tool surfaces only during tool-heavy generation. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled."),
             setting("advanced.debug", "Debug logging", "checkbox", "Record additional console and bridge diagnostics."),
           ],
         },
@@ -2120,7 +2125,6 @@
       } else if (command === "bcg:toggle-enabled") {
         updateSettings({ enabled: !settings.enabled });
         sendResponse({ ok: true, status: getStatus() });
-        setTimeout(() => location.reload(), 120);
       } else if (command === "bcg:toggle-tab") {
         setTabDisabled(!isTabDisabled());
         sendResponse({ ok: true });
@@ -8563,6 +8567,7 @@ if (globalThis.BetterChatGPT) {
   }
 
   function sendHeartbeat(metrics) {
+    const guardStatus = BCG.nativeToolFreezeGuard?.status?.() || null;
     const api = extensionApi();
     if (!api?.runtime?.sendMessage) return;
     try {
@@ -8573,6 +8578,11 @@ if (globalThis.BetterChatGPT) {
           at: Date.now(),
           path: safePath(),
           ...metrics,
+          guardActive: Boolean(guardStatus?.active),
+          guardHeavy: Boolean(guardStatus?.heavy),
+          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),
+          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),
+          guardSkippedTurns: Number(guardStatus?.skippedTurnCount || 0),
         },
       });
       result?.catch?.(() => {});

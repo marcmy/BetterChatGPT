@@ -39,16 +39,8 @@ async function markRecovered(key, recoveredAt, gapMs) {
   }
 }
 
-api.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== "bcg:perf-heartbeat" || !sender.tab?.id) return;
-  const payload = message.payload || {};
-  const key = watchKey(sender, payload);
-  const now = Date.now();
-  const existing = watches.get(key);
-  if (existing?.timer) clearTimeout(existing.timer);
-  if (existing?.suspectedAt) void markRecovered(key, new Date(now).toISOString(), now - Number(existing.lastAt || now));
-
-  const lastHeartbeat = {
+function heartbeatSnapshot(payload, now) {
+  return {
     at: new Date(Number(payload.at || now)).toISOString(),
     path: String(payload.path || "/").slice(0, 180),
     visibility: String(payload.visibility || "").slice(0, 20),
@@ -60,8 +52,24 @@ api.runtime.onMessage.addListener((message, sender) => {
     messageTurns: Number(payload.messageTurns || 0),
     codeBlocks: Number(payload.codeBlocks || 0),
     iframes: Number(payload.iframes || 0),
+    guardActive: Boolean(payload.guardActive),
+    guardHeavy: Boolean(payload.guardHeavy),
+    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),
+    guardSkippedTools: Number(payload.guardSkippedTools || 0),
+    guardSkippedTurns: Number(payload.guardSkippedTurns || 0),
   };
+}
 
+api.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== "bcg:perf-heartbeat" || !sender.tab?.id) return;
+  const payload = message.payload || {};
+  const key = watchKey(sender, payload);
+  const now = Date.now();
+  const existing = watches.get(key);
+  if (existing?.timer) clearTimeout(existing.timer);
+  if (existing?.suspectedAt) void markRecovered(key, new Date(now).toISOString(), now - Number(existing.lastAt || now));
+
+  const lastHeartbeat = heartbeatSnapshot(payload, now);
   const recentHeartbeats = Array.isArray(existing?.recentHeartbeats)
     ? existing.recentHeartbeats.slice(-(MAX_HEARTBEATS - 1))
     : [];
