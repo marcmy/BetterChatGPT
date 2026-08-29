@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Better ChatGPT",
+  "version": "1.1",
+  "description": "Wide layout, UI persistence, Project shortcuts, cross-device stale-chat protection, queued sending, appearance, native hang diagnostics, and clean paste/copy for ChatGPT.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "action": {
+    "default_title": "Better ChatGPT",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "page-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "performance-background.js"
+  }
+}

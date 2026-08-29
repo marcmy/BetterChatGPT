@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Better ChatGPT</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header><strong>Better ChatGPT</strong><span id="version" aria-label="Extension version"></span></header>
+  <div id="status" role="status">Checking this tab…</div>
+  <div class="grid">
+    <button id="toggle">Enable / disable</button>
+    <button id="settings" class="primary">Open settings</button>
+    <button id="tab">Disable on this tab</button>
+    <button id="reload">Reload ChatGPT</button>
+    <button id="diagnostics">Copy diagnostics</button>
+  </div>
+  <p id="note">Open a ChatGPT tab to use these controls.</p>
+  <script src="popup.js"></script>
+</body>
+</html>
