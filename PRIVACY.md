@@ -3,7 +3,7 @@
 Better ChatGPT runs locally in your browser.
 
 - It does not send analytics, telemetry, prompts, conversations, files, or settings to the developer.
-- It does not load remote JavaScript. The Markdown parser and sanitizer are packaged inside the extension/userscript.
+- It does not load remote JavaScript.
 - Extension access is limited to `chatgpt.com` and `chat.openai.com`.
 - Settings are stored locally by default. Browser sync is optional, syncs only Better ChatGPT settings, and uses the browser's own extension-sync service. Enabling it reads an existing synced copy before uploading this device's settings.
 - Diagnostic reports exclude prompt/message content and attachment names by design.
