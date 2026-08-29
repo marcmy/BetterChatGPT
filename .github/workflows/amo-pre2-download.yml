@@ -1,0 +1,56 @@
+name: Recover BetterChatGPT pre.2 XPI from AMO
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/amo-pre2-download.yml"]
+
+permissions:
+  contents: read
+
+env:
+  AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+  AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download authenticated unlisted XPI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, hashlib, hmac, json, os, time, uuid, urllib.request, urllib.error
+          from pathlib import Path
+          issuer=os.environ['AMO_JWT_ISSUER']; secret=os.environ['AMO_JWT_SECRET'].encode()
+          b64=lambda b: base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+          now=int(time.time()); head={'alg':'HS256','typ':'JWT'}; body={'iss':issuer,'jti':str(uuid.uuid4()),'iat':now,'exp':now+120}
+          raw=f"{b64(json.dumps(head,separators=(',',':')).encode())}.{b64(json.dumps(body,separators=(',',':')).encode())}"
+          token=f"{raw}.{b64(hmac.new(secret,raw.encode(),hashlib.sha256).digest())}"
+          headers={'Authorization':f'JWT {token}','User-Agent':'BetterChatGPT-pre2-recovery'}
+          base='https://addons.mozilla.org/api/v5/addons/addon/3062261/versions/'
+          def load(url):
+              with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=60) as r:return json.load(r)
+          try: version=load(base+'v1.1.2/')
+          except urllib.error.HTTPError as exc:
+              if exc.code!=404: raise
+              listing=load(base+'?filter=all_with_unlisted&page_size=50')
+              version=next((v for v in listing.get('results',[]) if str(v.get('version'))=='1.1.2'),None)
+              if not version: raise RuntimeError('AMO 1.1.2 not found')
+          info=version.get('file') or {}; url=info.get('url')
+          if not url: raise RuntimeError('AMO file URL missing')
+          print('AMO file status:', info.get('status'), 'channel:', version.get('channel'), 'id:', info.get('id'))
+          with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=120) as r:data=r.read()
+          digest=hashlib.sha256(data).hexdigest(); expected=str(info.get('hash') or '')
+          if expected.startswith('sha256:') and digest.lower()!=expected.split(':',1)[1].lower():raise RuntimeError(f'hash mismatch {digest} != {expected}')
+          Path('BetterChatGPT-firefox-v1.1-pre.2.xpi').write_bytes(data)
+          print('Recovered XPI:',len(data),'bytes sha256:'+digest)
+          PY
+          unzip -t BetterChatGPT-firefox-v1.1-pre.2.xpi >/dev/null
+          unzip -l BetterChatGPT-firefox-v1.1-pre.2.xpi | grep -q 'META-INF/mozilla.rsa'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: BetterChatGPT-firefox-v1.1-pre.2-signed
+          path: BetterChatGPT-firefox-v1.1-pre.2.xpi
+          if-no-files-found: error
