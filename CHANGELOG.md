@@ -1,6 +1,17 @@
 # Changelog
 
-## 1.1 (pre-release) - 2026-08-29
+## 1.1-pre.2 - 2026-08-29
+
+- Keep hyperlinks inside colored user bubbles on the browser-native blue link color instead of inheriting BetterChatGPT text colors.
+- Make all regular settings, profiles, imports, and section resets apply on-the-fly without requiring a ChatGPT reload. Master enable now suspends/resumes feature runtimes live; the Native hang recorder remains intentionally independent for A/B diagnostics.
+- Make Smart scrolling, Queued sending, plain-text paste/copy, and edited-message attachment enhancement react to settings changes without page reloads.
+- Harden queued native attachments during generation: observe file-input, paste, and drop File objects without preventing or replaying ChatGPT's native upload events; wait for native upload completion before releasing a queued send.
+- Narrow page-bridge attachment metadata parsing so generic tool/search responses are no longer cloned and recursively scanned.
+- Remove the final dead Long-chat optimizer UI remnant (Wake all messages).
+- Add a permanent regression checker covering removed v1.0.83 behaviors, live-setting bootstrap gates, native attachment ownership, and link styling.
+- Raise Firefox's minimum version to 142 to match Mozilla's `data_collection_permissions` manifest support and package this pre-release internally as extension version `1.1.2`.
+
+## 1.1-pre.1 - 2026-08-29
 
 - Update the **Classic dark gray** preset to match the current ChatGPT desktop dark theme: conversation `#121212` / `#FCFCFC`, composer `#242424`, sidebar `#202020`.
 - Remove BetterChatGPT's obsolete **Live uploads while generating** takeover and leave uploads to ChatGPT's native implementation while retaining **Queued send**.

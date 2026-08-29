@@ -3,7 +3,7 @@
 
   if (globalThis.BetterChatGPT?.version) return;
 
-  const VERSION = "1.1";
+  const VERSION = "1.1-pre.2";
   const STORAGE_KEY = "better-chatgpt:settings-v1";
   const SYNC_SCHEMA_VERSION = 1;
   const SYNC_WRITE_DELAY_MS = 450;
@@ -418,7 +418,7 @@
     updateReloadUi();
   }
 
-  function updateSettings(patch, { announce = false, reloadRequired = true, preserveProfile = false } = {}) {
+  function updateSettings(patch, { announce = false, reloadRequired = false, preserveProfile = false } = {}) {
     const previousProfile = settings.profile;
     const previousSync = settings.sync;
     patch = normalizeLauncherPatch(patch);
@@ -431,7 +431,7 @@
     if (!syncTransition) syncWrite();
     if (reloadRequired) markReloadRequired();
     dispatchSettingsChanged("update");
-    if (announce && !syncTransition) notify(reloadRequired ? "Saved. Reload ChatGPT to apply every change." : "Saved.");
+    if (announce && !syncTransition) notify(reloadRequired ? "Saved. Reload ChatGPT to apply this structural change." : "Saved.");
     return settings;
   }
 
@@ -443,9 +443,9 @@
     saveLocalSettings();
     const syncTransition = handleSyncStateChange(previousSync, { announce: options.announce !== false });
     if (!syncTransition) syncWrite();
-    if (options.reloadRequired !== false) markReloadRequired();
+    if (options.reloadRequired === true) markReloadRequired();
     dispatchSettingsChanged("replace");
-    if (options.announce !== false) notify("Settings imported. Reload ChatGPT to apply every change.");
+    if (options.announce !== false) notify("Settings imported.");
   }
 
   function applyProfile(profile) {
@@ -459,9 +459,8 @@
     globalThis.__BCG_SETTINGS__ = settings;
     saveLocalSettings();
     syncWrite();
-    markReloadRequired();
     dispatchSettingsChanged("profile");
-    notify(`${profile[0].toUpperCase()}${profile.slice(1)} profile applied. Reload ChatGPT.`);
+    notify(`${profile[0].toUpperCase()}${profile.slice(1)} profile applied.`);
     return true;
   }
 
@@ -990,10 +989,7 @@
   }
 
   function isLiveSettingPath(path) {
-    return path === "sync"
-      || path.startsWith("appearance.")
-      || path.startsWith("layout.")
-      || path.startsWith("ui.");
+    return FIELD_BY_PATH.has(path) || path.startsWith("ui.");
   }
 
   function formatFieldValue(field, value) {
@@ -1262,11 +1258,6 @@
     const actions = document.createElement("div");
     actions.className = "bcg-tools-grid";
     const reload = makeButton("Reload ChatGPT", () => location.reload(), true);
-    const wake = makeButton("Wake all messages", () => {
-      window.dispatchEvent(new Event("bcg:wake-all"));
-      document.querySelectorAll(".cgpt-lco-hibernated").forEach((node) => node.classList.remove("cgpt-lco-hibernated"));
-      notify("All optimized messages are awake.");
-    });
     const exportButton = makeButton("Export settings", exportSettings);
     const importButton = makeButton("Import settings", importSettings);
     const diagnosticButton = makeButton("Copy diagnostics", copyDiagnostics);
@@ -1277,7 +1268,7 @@
     });
     const resetButton = makeButton("Reset everything", resetEverything);
     resetButton.dataset.danger = "1";
-    actions.append(reload, wake, exportButton, importButton, diagnosticButton, showReport, resetButton);
+    actions.append(reload, exportButton, importButton, diagnosticButton, showReport, resetButton);
     const report = document.createElement("pre");
     report.className = "bcg-diagnostics";
     report.dataset.diagnostics = "1";
@@ -1354,7 +1345,7 @@
     const note = panel.querySelector("[data-bcg-status-note]");
     const dot = panel.querySelector(".bcg-status-dot");
     if (title) title.textContent = active ? "Extension active" : "Extension disabled";
-    if (note) note.textContent = active ? "Appearance and layout apply instantly." : "Enable Better ChatGPT in General settings.";
+    if (note) note.textContent = active ? "Settings apply instantly." : "Enable Better ChatGPT in General settings.";
     if (dot) dot.style.background = active ? "var(--bcg-success)" : "#777783";
   }
 
@@ -1448,8 +1439,7 @@
     if (!section) return;
     const patch = {};
     section.resetPaths.forEach((path) => assignPatchPath(patch, path, getDefaultPath(path)));
-    const reloadRequired = !["appearance", "layout"].includes(section.id);
-    updateSettings(patch, { reloadRequired });
+    updateSettings(patch, { reloadRequired: false });
     if (section.id === "appearance") {
       apiObject.refreshPageColors?.();
       window.dispatchEvent(new Event("bcg:appearance-refresh"));
@@ -4488,7 +4478,7 @@ html[${SIDEBAR_ATTRIBUTE}="1"] :is(
 })();
 
 /* ===== appearance ===== */
-if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isTabDisabled() && (true)) {
+if (globalThis.BetterChatGPT) {
   try {
     (() => {
       "use strict";
@@ -4569,6 +4559,10 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
 
         bubble.querySelectorAll("*").forEach((node) => {
           if (!(node instanceof HTMLElement)) return;
+          if (node.closest('a[href], [role="link"]')) {
+            setManagedStyle(node, "color", "LinkText");
+            return;
+          }
           if (node.closest('pre, code, button, [role="button"]')) return;
           setManagedStyle(node, "color", globalThis.BetterChatGPT.getBubbleTextColor());
         });
@@ -4681,7 +4675,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
 }
 
 /* ===== hybrid-scroll ===== */
-if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
+if (globalThis.BetterChatGPT) {
   try {
     (function bootstrap(root, factory) {
       "use strict";
@@ -4716,13 +4710,23 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
       const CLICK_RETRY_DELAYS_MS = [120, 250, 450, 750];
       const NAVIGATION_SCROLL_DELAYS_MS = [0, 80, 180, 320, 550, 900, 1400, 2200, 3400, 5000];
       const BOTTOM_REARM_DISTANCE_PX = 48;
-      const ARM_DISTANCE_PX = globalThis.BetterChatGPT.settings.scrolling.armDistancePx;
-      const STABLE_MS = globalThis.BetterChatGPT.settings.scrolling.stableMs;
-      const MAX_FOLLOW_MS = globalThis.BetterChatGPT.settings.scrolling.maxFollowMs;
       const BOTTOM_TOLERANCE_PX = 3;
-      const MANUAL_PAUSE_MS = globalThis.BetterChatGPT.settings.scrolling.manualPauseMs;
       const USER_TRANSCRIPT_GROWTH_WINDOW_MS = 6000;
-      const VOICE_LATCH_MS = globalThis.BetterChatGPT.settings.scrolling.voiceLatchMs;
+
+      function scrollingEnabled() {
+        return Boolean(globalThis.BetterChatGPT?.isFeatureEnabled?.("scrolling.enabled"));
+      }
+
+      function liveScrollNumber(key, fallback) {
+        const value = Number(globalThis.BetterChatGPT?.settings?.scrolling?.[key]);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      const armDistancePx = () => liveScrollNumber("armDistancePx", 600);
+      const stableMs = () => liveScrollNumber("stableMs", 1800);
+      const maxFollowMs = () => liveScrollNumber("maxFollowMs", 12000);
+      const manualPauseMs = () => liveScrollNumber("manualPauseMs", 2500);
+      const voiceLatchMs = () => liveScrollNumber("voiceLatchMs", 90000);
 
       function computeFollowTarget(maximum) {
         return Number.isFinite(maximum) ? Math.max(0, maximum) : 0;
@@ -4777,12 +4781,12 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
         return Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= maxGapMs;
       }
 
-      function shouldArmFollow(distanceFromBottom, threshold = ARM_DISTANCE_PX) {
+      function shouldArmFollow(distanceFromBottom, threshold = armDistancePx()) {
         return Number.isFinite(distanceFromBottom) && distanceFromBottom >= 0 && distanceFromBottom <= threshold;
       }
 
-      function shouldStopFollow(now, startedAt, stableSince, stableMs = STABLE_MS, maxMs = MAX_FOLLOW_MS) {
-        return now - startedAt >= maxMs || now - stableSince >= stableMs;
+      function shouldStopFollow(now, startedAt, stableSince, stableWindowMs = stableMs(), maxMs = maxFollowMs()) {
+        return now - startedAt >= maxMs || now - stableSince >= stableWindowMs;
       }
 
       function install(win) {
@@ -4905,7 +4909,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
           const inactiveControl = classifyInactiveVoiceControlLabels(labels);
 
           if (activeControl) {
-            voiceLatchUntil = Math.max(voiceLatchUntil, now + VOICE_LATCH_MS);
+            voiceLatchUntil = Math.max(voiceLatchUntil, now + voiceLatchMs());
             sawActiveVoiceControl = true;
           } else if (sawActiveVoiceControl && inactiveControl) {
             voiceLatchUntil = 0;
@@ -4921,7 +4925,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
             };
 
             if (isIncrementalUserTranscript(lastUserTranscriptState, currentState)) {
-              voiceLatchUntil = Math.max(voiceLatchUntil, now + VOICE_LATCH_MS);
+              voiceLatchUntil = Math.max(voiceLatchUntil, now + voiceLatchMs());
             }
 
             if (
@@ -5165,7 +5169,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
 
         function tick() {
           timer = 0;
-          if (destroyed) return;
+          if (destroyed || !scrollingEnabled()) return;
 
           const now = win.performance.now();
           checkForConversationNavigation();
@@ -5194,7 +5198,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
 
           if (strategy === "voice-follow" && scroller && transcriptChanged) {
             startOrRefreshFollow(scroller, signature, now);
-            voiceLatchUntil = Math.max(voiceLatchUntil, now + VOICE_LATCH_MS);
+            voiceLatchUntil = Math.max(voiceLatchUntil, now + voiceLatchMs());
           } else if (strategy === "native-click" && activeFollow) {
             stopFollow();
           }
@@ -5240,7 +5244,8 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
         }
 
         function pauseForManualScroll() {
-          manualPauseUntil = win.performance.now() + MANUAL_PAUSE_MS;
+          if (!scrollingEnabled()) return;
+          manualPauseUntil = win.performance.now() + manualPauseMs();
           manualScrollHold = true;
           globalThis.__BCG_MANUAL_SCROLL_ACTIVE_UNTIL = Math.max(
             Number(globalThis.__BCG_MANUAL_SCROLL_ACTIVE_UNTIL || 0),
@@ -5267,8 +5272,23 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
         restoreHistoryHooks = installHistoryHooks();
         scheduleConversationBottomScroll("initial load");
 
+        function syncRuntimeSettings() {
+          modeOverride = globalThis.BetterChatGPT?.settings?.scrolling?.mode || "auto";
+          if (!scrollingEnabled()) {
+            win.clearTimeout(timer);
+            timer = 0;
+            manualPauseUntil = 0;
+            manualScrollHold = false;
+            cancelPendingAutomaticScroll();
+            stopFollow();
+            return;
+          }
+          if (!timer) timer = win.setTimeout(tick, POLL_MS);
+        }
+
         win.__chatgptHybridScroll = {
           forceVoiceFollow() {
+            if (!scrollingEnabled()) return false;
             modeOverride = "voice";
             const scroller = findTranscriptScroller();
             if (!scroller) return false;
@@ -5319,6 +5339,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
             doc.removeEventListener("touchmove", pauseForManualScroll, true);
             doc.removeEventListener("pointerdown", onPointerDown, true);
             doc.removeEventListener("keydown", onKeyDown, true);
+            win.removeEventListener("bcg:settings-changed", syncRuntimeSettings);
             restoreHistoryHooks();
             navigationScrollRequest += 1;
             stopFollow();
@@ -5326,7 +5347,8 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
           },
         };
 
-        timer = win.setTimeout(tick, POLL_MS);
+        win.addEventListener("bcg:settings-changed", syncRuntimeSettings);
+        syncRuntimeSettings();
       }
 
       return {
@@ -5346,19 +5368,19 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("scrolling.enabled")) {
 }
 
 /* ===== queued-send ===== */
-if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isTabDisabled() && globalThis.BetterChatGPT.settings.queue.enabled) {
+if (globalThis.BetterChatGPT) {
   try {
     (() => {
       "use strict";
 
       const CHECK_INTERVAL_MS = 250;
-      const MAX_QUEUE_MS = globalThis.BetterChatGPT.settings.queue.maxQueueMs;
-      const KEEP_SEND_BUTTON_VISUALLY_ENABLED = globalThis.BetterChatGPT.settings.queue.visuallyEnableSend;
       const NATIVE_COMPOSER_SETTLE_MS = 2500;
       const NATIVE_PAYLOAD_VISUAL_GRACE_MS = 120;
-      const NATIVE_PAYLOAD_HINT_MS = MAX_QUEUE_MS;
       const POINTER_QUEUE_GESTURE_DEDUPE_MS = 450;
-      const DEBUG = globalThis.BetterChatGPT.settings.advanced.debug;
+      const queueFeatureEnabled = () => Boolean(globalThis.BetterChatGPT?.isFeatureEnabled?.("queue.enabled"));
+      const maxQueueMs = () => Number(globalThis.BetterChatGPT?.settings?.queue?.maxQueueMs) || 600000;
+      const keepSendButtonVisuallyEnabled = () => Boolean(globalThis.BetterChatGPT?.isFeatureEnabled?.("queue.visuallyEnableSend"));
+      const nativePayloadHintMs = () => maxQueueMs();
       const QUEUE_OBSERVER_OPTIONS = {
         childList: true,
         subtree: true,
@@ -5423,7 +5445,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       let lastNativeUploadCount = 0;
 
       function log(...args) {
-        if (DEBUG) console.log("[ChatGPT queued send]", ...args);
+        if (globalThis.BetterChatGPT?.settings?.advanced?.debug) console.log("[ChatGPT queued send]", ...args);
       }
 
       function followUpBridge() {
@@ -5635,7 +5657,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
           // This lets us show the disabled send button as queueable without reading
           // huge temporary paste text or poking around attachment previews while
           // ChatGPT is still doing its own conversion/upload work.
-          nativePayloadHintUntil = Math.max(nativePayloadHintUntil, now + NATIVE_PAYLOAD_HINT_MS);
+          nativePayloadHintUntil = Math.max(nativePayloadHintUntil, now + nativePayloadHintMs());
 
           if (!nativePayloadVisualReadyAt || nativePayloadVisualReadyAt > now + NATIVE_PAYLOAD_VISUAL_GRACE_MS) {
             nativePayloadVisualReadyAt = now + NATIVE_PAYLOAD_VISUAL_GRACE_MS;
@@ -6159,7 +6181,10 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       }
 
       function updateVisualSendButton() {
-        if (!KEEP_SEND_BUTTON_VISUALLY_ENABLED) return;
+        if (!queueFeatureEnabled() || !keepSendButtonVisuallyEnabled()) {
+          if (visuallyOverriddenButton) clearVisualOverride(visuallyOverriddenButton);
+          return;
+        }
 
         installVisualOverrideStyle();
 
@@ -6305,7 +6330,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       }
 
       function shouldInterceptSendGesture() {
-        if (internalQueuedSendClick) return false;
+        if (!queueFeatureEnabled() || internalQueuedSendClick) return false;
         if (!probablyHasSomethingToSend()) return false;
         return queued || attachmentTransactionActive() || !canSendNow();
       }
@@ -6397,6 +6422,14 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       }
 
       function checkQueue() {
+        if (!queueFeatureEnabled()) {
+          if (queued) cancelQueue("Queued send canceled because queued sending was disabled.");
+          clearQueuedComposerFiles();
+          clearNativePayloadHint();
+          nativeComposerBusyUntil = 0;
+          if (visuallyOverriddenButton) clearVisualOverride(visuallyOverriddenButton);
+          return;
+        }
         if (
           !queued && isNativeComposerBusy() && !hasNativePayloadHint() &&
           !hasActiveNativeUpload() && !hasVisibleAttachmentPreview()
@@ -6409,7 +6442,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
 
         if (!queued) return;
 
-        if (Date.now() - queuedAt > MAX_QUEUE_MS) {
+        if (Date.now() - queuedAt > maxQueueMs()) {
           cancelQueue("Queued send expired.");
           return;
         }
@@ -6433,7 +6466,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       }
 
       function queueSend(source) {
-        if (!globalThis.BetterChatGPT.settings.queue.enabled) return false;
+        if (!queueFeatureEnabled()) return false;
         if (!probablyHasSomethingToSend()) {
           log("not queueing; composer looks empty");
           return false;
@@ -6475,9 +6508,37 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
         return Boolean(root && root.contains(event.target));
       }
 
+      function filesFromNativeTransfer(event) {
+        const transfer = event?.clipboardData || event?.dataTransfer;
+        if (!transfer) return [];
+        const files = Array.from(transfer.files || []).filter((file) => file instanceof File);
+        for (const item of Array.from(transfer.items || [])) {
+          if (item?.kind !== "file") continue;
+          const file = item.getAsFile?.();
+          if (file instanceof File && !files.some((candidate) => fileKey(candidate) === fileKey(file))) files.push(file);
+        }
+        return files;
+      }
+
+      for (const eventName of ["paste", "drop"]) {
+        document.addEventListener(
+          eventName,
+          (event) => {
+            if (!queueFeatureEnabled() || !eventIsInComposer(event) || !isAssistantGenerating()) return;
+            const files = filesFromNativeTransfer(event);
+            if (!files.length) return;
+            // Observe only. ChatGPT keeps full ownership of paste/drop and native upload.
+            rememberQueuedComposerFiles(files);
+            markNativeComposerBusy(`native ${eventName} attachment`, event);
+          },
+          true,
+        );
+      }
+
       window.addEventListener(
         "change",
         (event) => {
+          if (!queueFeatureEnabled()) return;
           if (event.target instanceof Element && event.target.closest('.bcg-edit-enhanced, [data-testid*="edit" i]')) return;
           if (!eventIsFileInputWithFiles(event)) return;
 
@@ -6494,6 +6555,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       document.addEventListener(
         "beforeinput",
         (event) => {
+          if (!queueFeatureEnabled()) return;
           const inputType = event.inputType || "";
 
           if (/insertFromPaste|insertFromDrop|insertReplacementText/i.test(inputType) && eventLooksComposerRelated(event)) {
@@ -6506,6 +6568,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
       document.addEventListener(
         "input",
         (event) => {
+          if (!queueFeatureEnabled()) return;
           if (eventIsFileInputWithFiles(event)) {
             markNativeComposerBusy("file input", event);
             return;
@@ -6620,6 +6683,8 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
         };
       };
 
+      window.addEventListener("bcg:settings-changed", scheduleCheck);
+
       setInterval(() => {
         scheduleCheck();
       }, 750);
@@ -6634,7 +6699,7 @@ if (globalThis.BetterChatGPT?.settings.enabled && !globalThis.BetterChatGPT?.isT
 }
 
 /* ===== plain-text-composer ===== */
-if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
+if (globalThis.BetterChatGPT) {
   try {
     (() => {
       "use strict";
@@ -6975,10 +7040,11 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
       window.addEventListener(
         "paste",
         (event) => {
+          if (!globalThis.BetterChatGPT?.isFeatureEnabled?.("composer.enabled")) return;
           const composer = getComposerFromNode(event.target);
           if (!composer) return;
 
-          // The existing queue/upload script owns live-follow-up pastes.
+          // ChatGPT owns live follow-up paste/upload handling while generation is active.
           if (isAssistantGenerating()) return;
 
           const transfer = event.clipboardData;
@@ -6999,6 +7065,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
       window.addEventListener(
         "copy",
         (event) => {
+          if (!globalThis.BetterChatGPT?.isFeatureEnabled?.("composer.enabled")) return;
           const selection = window.getSelection();
           const composer = getComposerFromNode(selection?.anchorNode) || getComposerFromNode(event.target);
 
@@ -7024,7 +7091,9 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
   "use strict";
 
   const BCG = globalThis.BetterChatGPT;
-  if (!BCG?.isFeatureEnabled("editAttachments.enabled")) return;
+  if (!BCG) return;
+
+  const editAttachmentsEnabled = () => Boolean(BCG.isFeatureEnabled("editAttachments.enabled"));
 
   const SESSION_CLASS = "bcg-edit-attachment-session";
   const TOOLBAR_CLASS = "bcg-edit-attachment-toolbar";
@@ -7619,6 +7688,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
   }
 
   function handleSubmitIntent(session, event) {
+    if (!editAttachmentsEnabled()) return;
     if (hasBlockingFiles(session)) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -7937,7 +8007,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
   }
 
   function attachSession(root) {
-    if (sessions.has(root) || !(root instanceof HTMLElement)) return;
+    if (!editAttachmentsEnabled() || sessions.has(root) || !(root instanceof HTMLElement)) return;
     const editor = findEditor(root);
     if (!editor) return;
 
@@ -8121,6 +8191,11 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
 
   function scan() {
     scanQueued = false;
+    if (!editAttachmentsEnabled()) {
+      clearEditDragState();
+      for (const [root, session] of Array.from(sessions)) destroySession(root, session);
+      return;
+    }
     const roots = collectEditRoots();
     roots.forEach(attachSession);
     for (const [root, session] of Array.from(sessions)) {
@@ -8172,6 +8247,7 @@ if (globalThis.BetterChatGPT?.isFeatureEnabled("composer.enabled")) {
   const dragCaptureController = installEditDragCapture();
   installExternalSubmitCapture(dragCaptureController.signal);
   window.addEventListener("bcg:edit-bridge-ready", scheduleScan, { signal: dragCaptureController.signal });
+  window.addEventListener("bcg:settings-changed", scheduleScan, { signal: dragCaptureController.signal });
   const observer = new MutationObserver(scheduleScan);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   const monitor = window.setInterval(scheduleScan, 500);

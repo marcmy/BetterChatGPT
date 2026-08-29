@@ -2,7 +2,7 @@
 
 BetterChatGPT is a browser extension for ChatGPT focused on quality-of-life improvements, customization, resilience, and diagnostics without replacing ChatGPT's native workflow. Chromium/Edge and Mozilla-signed Firefox builds are available.
 
-## v1.1 highlights
+## v1.1 pre-release highlights
 
 - **Sidebar state persistence** — remembers whether Pinned, Projects, and Chats are expanded or collapsed across reloads and browser restarts.
 - **Project home shortcut** — double-click a project in the sidebar to invoke ChatGPT's existing **Project home** action; the normal `...` menu item remains available.
@@ -28,9 +28,9 @@ BetterChatGPT is a browser extension for ChatGPT focused on quality-of-life impr
 
 ## Install — Edge / Chrome
 
-**[Download BetterChatGPT v1.1 for Chromium/Edge](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-chromium-v1.1.zip)**
+**[Download BetterChatGPT v1.1 pre.2 for Chromium/Edge](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-chromium-v1.1-pre.2.zip)**
 
-SHA-256: `1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6`
+SHA-256: `c59a817fcaaa6da23ef3410743610928690b11758a47125fa00463dabe296e10`
 
 1. Extract `BetterChatGPT-chromium-v1.1.zip`.
 2. Open `edge://extensions` or `chrome://extensions`.
@@ -39,9 +39,9 @@ SHA-256: `1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6`
 
 ## Install — Firefox
 
-**[Download Mozilla-signed BetterChatGPT v1.1 for Firefox](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-firefox-v1.1.xpi)**
+**[Download Mozilla-signed BetterChatGPT v1.1 pre.2 for Firefox](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-firefox-v1.1-pre.2.xpi)**
 
-SHA-256: `9cbc02d768fc6b84799085615fd5282fc47c76342283865b8d7eae9c85e9a727`
+SHA-256: `91f3e56dd31b818fc2e3d0062a19f08e0e07aee184d408c7ce9dc734c13b344c`
 
 The XPI is signed by Mozilla AMO as unlisted add-on **Better ChatGPT** (`better-chatgpt@marcmy.github.io`, AMO add-on #3062261).
 
@@ -65,7 +65,7 @@ See `AMO_REVIEW_NOTES.md` for Mozilla reviewer/build notes. Both published brows
 
 ## Settings
 
-Click the floating **B+** button in ChatGPT and choose **Settings…**. Most layout/appearance changes apply immediately. Structural behavior is safest to test after **Reload ChatGPT**.
+Click the floating **B+** button in ChatGPT and choose **Settings…**. All regular settings apply immediately; **Reload ChatGPT** remains available only as a manual troubleshooting action.
 
 The **Native hang recorder** lives under Advanced and intentionally remains active when BetterChatGPT's **Master enable** is off. This allows an A/B reproduction where BetterChatGPT's normal features are dormant but the recorder can still capture evidence from a native ChatGPT freeze. Disabling the extension itself from the browser's extension manager disables the recorder as well.
 

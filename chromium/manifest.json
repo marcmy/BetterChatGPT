@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better ChatGPT",
-  "version": "1.1",
+  "version": "1.1.2",
   "description": "Wide layout, UI persistence, Project shortcuts, cross-device stale-chat protection, queued sending, appearance, native hang diagnostics, and clean paste/copy for ChatGPT.",
   "permissions": [
     "storage",
@@ -40,5 +40,6 @@
   ],
   "background": {
     "service_worker": "performance-background.js"
-  }
+  },
+  "version_name": "1.1-pre.2"
 }
