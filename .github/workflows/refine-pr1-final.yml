@@ -45,6 +45,12 @@ jobs:
           bash /tmp/refine-pr1.sh
           python3 <<'PY'
           from pathlib import Path
+
+          guard_path = Path('chromium/performance-guard.js')
+          guard = guard_path.read_text(encoding='utf-8')
+          guard = guard.replace(r'\n', '\n')
+          guard_path.write_text(guard, encoding='utf-8')
+
           p = Path('chromium/content.js')
           text = p.read_text(encoding='utf-8')
           old = '    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");\n    setTimeout(() => location.reload(), 120);\n'
