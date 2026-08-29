@@ -42,50 +42,15 @@ jobs:
 
           p = Path('chromium/content.js')
           text = p.read_text(encoding='utf-8')
-          old = '''  function sectionName(button) {
-    const text = normalizedText(button);
-    for (const name of SECTION_NAMES) {
-      if (text === name || text.startsWith(`${name} `)) return name;
-    }
-    return "";
-  }
-
-  function candidateSectionButtons() {
-    return Array.from(document.querySelectorAll('button[aria-expanded], button[data-state], [role="button"][aria-expanded]'))
-      .filter((node) => SECTION_NAMES.has(sectionName(node)));
-  }
-'''
-          new = '''  function isTransientSidebarLayer(node) {
-    return Boolean(node?.closest?.(
-      '[role="dialog"], [role="menu"], [role="tooltip"], [data-radix-popper-content-wrapper], [data-floating-ui-portal], [data-headlessui-portal]',
-    ));
-  }
-
-  function sectionName(button) {
-    if (isTransientSidebarLayer(button)) return "";
-    const text = normalizedText(button);
-    const ariaLabel = String(button?.getAttribute?.("aria-label") || "").replace(/\\s+/g, " ").trim().toLowerCase();
-    for (const name of SECTION_NAMES) {
-      if (text === name || ariaLabel === name) return name;
-    }
-    return "";
-  }
-
-  function candidateSectionButtons() {
-    return Array.from(document.querySelectorAll('button[aria-expanded], button[data-state], [role="button"][aria-expanded]'))
-      .filter((node) => SECTION_NAMES.has(sectionName(node)));
-  }
-'''
+          old = '  function sectionName(button) {\n    const text = normalizedText(button);\n    for (const name of SECTION_NAMES) {\n      if (text === name || text.startsWith(`${name} `)) return name;\n    }\n    return "";\n  }\n\n  function candidateSectionButtons() {\n    return Array.from(document.querySelectorAll(\'button[aria-expanded], button[data-state], [role="button"][aria-expanded]\'))\n      .filter((node) => SECTION_NAMES.has(sectionName(node)));\n  }\n'
+          new = '  function isTransientSidebarLayer(node) {\n    return Boolean(node?.closest?.(\n      \'[role="dialog"], [role="menu"], [role="tooltip"], [data-radix-popper-content-wrapper], [data-floating-ui-portal], [data-headlessui-portal]\',\n    ));\n  }\n\n  function sectionName(button) {\n    if (isTransientSidebarLayer(button)) return "";\n    const text = normalizedText(button);\n    const ariaLabel = String(button?.getAttribute?.("aria-label") || "").replace(/\\s+/g, " ").trim().toLowerCase();\n    for (const name of SECTION_NAMES) {\n      if (text === name || ariaLabel === name) return name;\n    }\n    return "";\n  }\n\n  function candidateSectionButtons() {\n    return Array.from(document.querySelectorAll(\'button[aria-expanded], button[data-state], [role="button"][aria-expanded]\'))\n      .filter((node) => SECTION_NAMES.has(sectionName(node)));\n  }\n'
           text = replace_once(text, old, new, 'sidebar section classifier')
           p.write_text(text, encoding='utf-8')
 
           p = Path('tools/regression-check.mjs')
           checks = p.read_text(encoding='utf-8')
           anchor = 'requireText(content, \'setManagedStyle(node, "color", "LinkText")\', "user-bubble links stay blue");\n'
-          addition = anchor + '''requireText(content, 'function isTransientSidebarLayer(node)', "sidebar persistence ignores transient native panels");
-requireText(content, 'if (text === name || ariaLabel === name) return name;', "sidebar sections require exact labels");
-forbidText(content, 'text.startsWith(`${name} `)', "sidebar section prefix matching can click native flyouts");
-'''
+          addition = anchor + 'requireText(content, \'function isTransientSidebarLayer(node)\', "sidebar persistence ignores transient native panels");\nrequireText(content, \'if (text === name || ariaLabel === name) return name;\', "sidebar sections require exact labels");\nforbidText(content, \'text.startsWith(`${name} `)\', "sidebar section prefix matching can click native flyouts");\n'
           checks = replace_once(checks, anchor, addition, 'sidebar persistence regression checks')
           p.write_text(checks, encoding='utf-8')
 
