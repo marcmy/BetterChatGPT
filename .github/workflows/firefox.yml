@@ -1,6 +1,13 @@
 name: BetterChatGPT Firefox
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "chromium/**"
+      - "tools/build-firefox.mjs"
+      - ".github/workflows/firefox.yml"
   pull_request:
     paths:
       - "chromium/**"
