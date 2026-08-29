@@ -1,2 +1,0 @@
-c59a817fcaaa6da23ef3410743610928690b11758a47125fa00463dabe296e10  BetterChatGPT-chromium-v1.1-pre.2.zip
-91f3e56dd31b818fc2e3d0062a19f08e0e07aee184d408c7ce9dc734c13b344c  BetterChatGPT-firefox-v1.1-pre.2.xpi

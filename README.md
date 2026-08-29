@@ -13,6 +13,8 @@ BetterChatGPT is a browser extension for ChatGPT focused on quality-of-life impr
 - **Wide-mode polish** for the conversation overflow (`...`) control and relocated Share row.
 - Removed obsolete **Live uploads while generating**, **Focus composer**, and **Long-chat optimizer** features now superseded by native ChatGPT behavior.
 
+The latest published build is **v1.1-pre.1**. The repository may contain newer pre.2 development source while that next pre-release is being tested.
+
 ## Existing features
 
 - Wide mode with independent conversation/composer width controls.
@@ -28,9 +30,9 @@ BetterChatGPT is a browser extension for ChatGPT focused on quality-of-life impr
 
 ## Install — Edge / Chrome
 
-**[Download BetterChatGPT v1.1 pre.2 for Chromium/Edge](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-chromium-v1.1-pre.2.zip)**
+**[Download BetterChatGPT v1.1-pre.1 for Chromium/Edge](https://github.com/marcmy/BetterChatGPT/releases/download/v1.1-pre.1/BetterChatGPT-chromium-v1.1.zip)**
 
-SHA-256: `c59a817fcaaa6da23ef3410743610928690b11758a47125fa00463dabe296e10`
+SHA-256: `1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6`
 
 1. Extract `BetterChatGPT-chromium-v1.1.zip`.
 2. Open `edge://extensions` or `chrome://extensions`.
@@ -39,9 +41,9 @@ SHA-256: `c59a817fcaaa6da23ef3410743610928690b11758a47125fa00463dabe296e10`
 
 ## Install — Firefox
 
-**[Download Mozilla-signed BetterChatGPT v1.1 pre.2 for Firefox](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-firefox-v1.1-pre.2.xpi)**
+**[Download Mozilla-signed BetterChatGPT v1.1-pre.1 for Firefox](https://github.com/marcmy/BetterChatGPT/releases/download/v1.1-pre.1/BetterChatGPT-firefox-v1.1.xpi)**
 
-SHA-256: `91f3e56dd31b818fc2e3d0062a19f08e0e07aee184d408c7ce9dc734c13b344c`
+SHA-256: `9cbc02d768fc6b84799085615fd5282fc47c76342283865b8d7eae9c85e9a727`
 
 The XPI is signed by Mozilla AMO as unlisted add-on **Better ChatGPT** (`better-chatgpt@marcmy.github.io`, AMO add-on #3062261).
 
@@ -51,9 +53,9 @@ The XPI is signed by Mozilla AMO as unlisted add-on **Better ChatGPT** (`better-
 
 Firefox packaging is generated from the same committed runtime with `tools/build-firefox.mjs`. The transform replaces Chromium's MV3 background service worker declaration with Firefox's background script declaration and adds the stable Gecko ID plus Mozilla's required data-collection declaration.
 
-Every push that changes the runtime runs JavaScript validation, `web-ext lint`, and an unsigned Firefox package build in GitHub Actions. A manual **BetterChatGPT Firefox** workflow run with **Sign the Firefox XPI with Mozilla AMO** enabled uses the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` to request an unlisted Mozilla signature and uploads the signed XPI as an Actions artifact.
+Firefox validation, packaging, and AMO signing are intentionally run **only at release time**. A manual **BetterChatGPT Firefox Release** workflow validates the release source, stages the Firefox transform, runs `web-ext lint`, packages the unsigned build, and—when signing is enabled—uses `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` to request an unlisted Mozilla signature and upload the signed XPI as an Actions artifact.
 
-Local Firefox packaging:
+Local Firefox release packaging:
 
 ```bash
 node tools/build-firefox.mjs
@@ -61,7 +63,7 @@ npx --yes web-ext@10 lint --source-dir build/firefox-src
 npx --yes web-ext@10 build --source-dir build/firefox-src --artifacts-dir build/firefox --overwrite-dest
 ```
 
-See `AMO_REVIEW_NOTES.md` for Mozilla reviewer/build notes. Both published browser packages are checksummed in `artifacts/SHA256SUMS.txt`.
+See `AMO_REVIEW_NOTES.md` for Mozilla reviewer/build notes. Published release packages include a `SHA256SUMS.txt` release asset.
 
 ## Settings
 
