@@ -1,5 +1,5 @@
 # Publishing helper for the v1.1 package staged in .release-parts.
-# Retry after repairing the corrupted staging chunk.
+# Retry after repairing the corrupted staging chunk (verified b7fd0656...).
 name: Assemble BetterChatGPT v1.1
 
 on:
