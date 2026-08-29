@@ -23,6 +23,11 @@ requireText(content, 'setting("advanced.nativeToolFreezeGuard", "Native tool fre
 requireText(content, 'nativeToolFreezeGuard: apiObject.nativeToolFreezeGuard?.status?.() || null', "guard diagnostics");
 forbidText(content, 'setTimeout(() => location.reload(), 120);', "popup master toggle forced reload");
 requireText(guard, 'const HEAVY_TOOL_THRESHOLD = 4;', "adaptive guard heavy threshold");
+requireText(guard, 'setAttribute(ROOT_HEAVY_ATTR, "1")', "heavy-mode CSS attribute value");
+forbidText(guard, 'toggleAttribute(ROOT_HEAVY_ATTR, heavy)', "boolean heavy attribute cannot satisfy value selector");
+requireText(guard, '!element.closest(TURN_SELECTOR)', "tool classification stays inside conversation turns");
+requireText(guard, 'trackedTools.clear()', "guard restart clears stale tracked tools");
+requireText(guard, 'turnOrder.length = 0', "guard restart clears stale turn order");
 requireText(guard, 'IntersectionObserver', "offscreen-only guard observer");
 requireText(guard, 'nearViewport.get(tool) === false', "only offscreen tool surfaces are skipped");
 requireText(guard, 'protectedTailSet()', "active tail turns stay rendered");

@@ -115,8 +115,9 @@
 
   function looksLikeToolSurface(element) {
     if (!(element instanceof Element)) return false;
-    if (element.tagName === "IFRAME") return true;
     if (!(element instanceof HTMLElement)) return false;
+    if (!element.closest(TURN_SELECTOR)) return false;
+    if (element.tagName === "IFRAME") return true;
     if (NON_SURFACE_TAGS.has(element.tagName)) return false;
     const testId = String(element.getAttribute("data-testid") || "");
     if (NON_SURFACE_TESTID.test(testId)) return false;
@@ -229,7 +230,8 @@
     const nextHeavy = generationActive() && markedToolCount >= HEAVY_TOOL_THRESHOLD;
     if (heavy !== nextHeavy) {
       heavy = nextHeavy;
-      document.documentElement.toggleAttribute(ROOT_HEAVY_ATTR, heavy);
+      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");
+      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
       BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {
         toolSurfaces: markedToolCount,
         toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],
@@ -304,13 +306,16 @@
     scanTimer = 0;
     pendingRoots.clear();
     heavy = false;
-    markedToolCount = trackedTools.size;
+    markedToolCount = 0;
     skippedToolCount = 0;
     skippedTurnCount = 0;
     document.documentElement.removeAttribute(ROOT_ACTIVE_ATTR);
     document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
     for (const turn of trackedTurns) turn.classList?.remove(TURN_SKIP_CLASS);
     for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);
+    trackedTurns.clear();
+    turnOrder.length = 0;
+    trackedTools.clear();
     BCG.recordTrace?.("native-tool-freeze-guard-stopped", {});
   }
 
