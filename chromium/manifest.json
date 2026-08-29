@@ -33,7 +33,8 @@
         "https://chat.openai.com/*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "performance-guard.js"
       ],
       "run_at": "document_start"
     }
