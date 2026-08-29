@@ -945,7 +945,7 @@
           fields: [
             setting("advanced.notifications", "Notifications", "checkbox", "Show Better ChatGPT status toasts."),
             setting("advanced.performanceHangRecorder", "Native hang recorder", "checkbox", "Record low-overhead timing, memory, DOM-count, and long-frame diagnostics for ChatGPT freezes. Stays active when Master enable is off so the native UI can be tested without Better ChatGPT features."),
-            setting("advanced.nativeToolFreezeGuard", "Native tool freeze guard", "checkbox", "Reduce renderer work from offscreen conversation/tool surfaces only during tool-heavy generation. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled."),
+            setting("advanced.nativeToolFreezeGuard", "Native tool freeze guard", "checkbox", "During tool-heavy generation, isolate tool layout work and skip offscreen conversation/tool rendering while protecting the active tail and interactive tool surfaces. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled."),
             setting("advanced.debug", "Debug logging", "checkbox", "Record additional console and bridge diagnostics."),
           ],
         },
@@ -8581,6 +8581,7 @@ if (globalThis.BetterChatGPT) {
           guardActive: Boolean(guardStatus?.active),
           guardHeavy: Boolean(guardStatus?.heavy),
           guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),
+          guardContainedTools: Number(guardStatus?.containedToolCount || 0),
           guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),
           guardSkippedTurns: Number(guardStatus?.skippedTurnCount || 0),
         },

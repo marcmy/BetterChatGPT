@@ -55,6 +55,7 @@ function heartbeatSnapshot(payload, now) {
     guardActive: Boolean(payload.guardActive),
     guardHeavy: Boolean(payload.guardHeavy),
     guardToolSurfaces: Number(payload.guardToolSurfaces || 0),
+    guardContainedTools: Number(payload.guardContainedTools || 0),
     guardSkippedTools: Number(payload.guardSkippedTools || 0),
     guardSkippedTurns: Number(payload.guardSkippedTurns || 0),
   };

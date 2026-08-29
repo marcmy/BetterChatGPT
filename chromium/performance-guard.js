@@ -9,6 +9,7 @@
   const ROOT_HEAVY_ATTR = "data-bcg-native-freeze-guard-heavy";
   const TURN_SKIP_CLASS = "bcg-native-freeze-guard-turn-skip";
   const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";
+  const TOOL_CONTAIN_CLASS = "bcg-native-freeze-guard-tool-contain";
   const HEAVY_TOOL_THRESHOLD = 4;
   const PROTECTED_TAIL_TURNS = 3;
   const SCAN_DELAY_MS = 100;
@@ -38,6 +39,7 @@
   let active = false;
   let heavy = false;
   let markedToolCount = 0;
+  let containedToolCount = 0;
   let skippedToolCount = 0;
   let skippedTurnCount = 0;
 
@@ -61,6 +63,10 @@
       html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TURN_SKIP_CLASS} {
         content-visibility: auto;
         contain-intrinsic-size: auto 720px;
+      }
+
+      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_CONTAIN_CLASS} {
+        contain: layout;
       }
 
       html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {
@@ -96,6 +102,7 @@
     if (!trackedTools.delete(tool)) return;
     intersectionObserver?.unobserve(tool);
     tool.classList?.remove(TOOL_SKIP_CLASS);
+    tool.classList?.remove(TOOL_CONTAIN_CLASS);
   }
 
   function trackTool(tool) {
@@ -176,6 +183,7 @@
   function applyVisibilityPolicy() {
     const protectedTail = protectedTailSet();
     let nextSkippedTurns = 0;
+    let nextContainedTools = 0;
     let nextSkippedTools = 0;
 
     for (const turn of Array.from(trackedTurns)) {
@@ -198,15 +206,17 @@
         untrackTool(tool);
         continue;
       }
-      const shouldSkip = active
-        && heavy
-        && nearViewport.get(tool) === false
-        && !isInteractionProtected(tool);
+      const interactionProtected = active && heavy && isInteractionProtected(tool);
+      const shouldContain = active && heavy && !interactionProtected;
+      const shouldSkip = shouldContain && nearViewport.get(tool) === false;
+      tool.classList.toggle(TOOL_CONTAIN_CLASS, shouldContain);
       tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);
+      if (shouldContain) nextContainedTools += 1;
       if (shouldSkip) nextSkippedTools += 1;
     }
 
     skippedTurnCount = nextSkippedTurns;
+    containedToolCount = nextContainedTools;
     skippedToolCount = nextSkippedTools;
   }
 
@@ -228,19 +238,23 @@
     for (const tool of Array.from(trackedTools)) if (!tool.isConnected) untrackTool(tool);
     markedToolCount = trackedTools.size;
     const nextHeavy = generationActive() && markedToolCount >= HEAVY_TOOL_THRESHOLD;
-    if (heavy !== nextHeavy) {
+    const heavyChanged = heavy !== nextHeavy;
+    if (heavyChanged) {
       heavy = nextHeavy;
       if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");
       else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
+    }
+    applyVisibilityPolicy();
+    if (heavyChanged) {
       BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {
         toolSurfaces: markedToolCount,
         toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],
+        containedTools: containedToolCount,
         skippedTools: skippedToolCount,
         skippedTurns: skippedTurnCount,
         generating: generationActive(),
       });
     }
-    applyVisibilityPolicy();
   }
 
   function enqueueRoot(root) {
@@ -307,12 +321,16 @@
     pendingRoots.clear();
     heavy = false;
     markedToolCount = 0;
+    containedToolCount = 0;
     skippedToolCount = 0;
     skippedTurnCount = 0;
     document.documentElement.removeAttribute(ROOT_ACTIVE_ATTR);
     document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
     for (const turn of trackedTurns) turn.classList?.remove(TURN_SKIP_CLASS);
-    for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);
+    for (const tool of trackedTools) {
+      tool.classList?.remove(TOOL_SKIP_CLASS);
+      tool.classList?.remove(TOOL_CONTAIN_CLASS);
+    }
     trackedTurns.clear();
     turnOrder.length = 0;
     trackedTools.clear();
@@ -343,6 +361,7 @@
         active,
         heavy,
         markedToolCount: trackedTools.size,
+        containedToolCount,
         skippedToolCount,
         skippedTurnCount,
         threshold: HEAVY_TOOL_THRESHOLD,
