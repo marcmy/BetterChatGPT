@@ -23,6 +23,16 @@ requireText(content, 'setting("advanced.nativeToolFreezeGuard", "Native tool fre
 requireText(content, 'nativeToolFreezeGuard: apiObject.nativeToolFreezeGuard?.status?.() || null', "guard diagnostics");
 forbidText(content, 'setTimeout(() => location.reload(), 120);', "popup master toggle forced reload");
 requireText(guard, 'const HEAVY_TOOL_THRESHOLD = 4;', "adaptive guard heavy threshold");
+requireText(guard, 'const REHYDRATE_WINDOW_MS = 3000;', "rehydration prewarm window");
+requireText(guard, 'const ROOT_REHYDRATE_ATTR = "data-bcg-native-freeze-guard-rehydrate";', "rehydration root attribute");
+requireText(guard, 'enterRehydrate("startup")', "startup prewarm before conversation hydration");
+requireText(guard, 'enterRehydrate("hidden", { holdWhileHidden: true })', "hidden tabs stay prewarmed for background tool updates");
+requireText(guard, 'globalThis.navigation?.addEventListener?.("navigate"', "SPA navigation prewarm");
+requireText(guard, 'document.addEventListener("pointerdown", handlePotentialConversationNavigation, true)', "pre-navigation pointer guard");
+requireText(guard, 'generationActive() || isRehydrating() || rehydrateGrace', "rehydration can engage heavy guard before native generating UI appears");
+requireText(guard, 'ROOT_REHYDRATE_ATTR}="1"] ${TURN_SELECTOR}', "direct CSS prewarms incoming turns before JS classification");
+requireText(content, 'guardRehydrating', "heartbeat records rehydration state");
+requireText(perfBackground, 'guardRehydrateReason', "background runway retains rehydration reason");
 requireText(guard, 'setAttribute(ROOT_HEAVY_ATTR, "1")', "heavy-mode CSS attribute value");
 forbidText(guard, 'toggleAttribute(ROOT_HEAVY_ATTR, heavy)', "boolean heavy attribute cannot satisfy value selector");
 requireText(guard, '!element.closest(TURN_SELECTOR)', "tool classification stays inside conversation turns");
