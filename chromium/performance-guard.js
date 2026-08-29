@@ -7,12 +7,15 @@
   const STYLE_ID = "bcg-native-tool-freeze-guard-style";
   const ROOT_ACTIVE_ATTR = "data-bcg-native-freeze-guard";
   const ROOT_HEAVY_ATTR = "data-bcg-native-freeze-guard-heavy";
+  const ROOT_REHYDRATE_ATTR = "data-bcg-native-freeze-guard-rehydrate";
   const TURN_SKIP_CLASS = "bcg-native-freeze-guard-turn-skip";
   const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";
   const TOOL_CONTAIN_CLASS = "bcg-native-freeze-guard-tool-contain";
   const HEAVY_TOOL_THRESHOLD = 4;
   const PROTECTED_TAIL_TURNS = 3;
   const SCAN_DELAY_MS = 100;
+  const REHYDRATE_WINDOW_MS = 3000;
+  const HEAVY_RELEASE_GRACE_MS = 2000;
   const NEAR_VIEWPORT_MARGIN_PX = 1600;
 
   const TURN_SELECTOR = 'article[data-testid^="conversation-turn"]';
@@ -30,12 +33,16 @@
   const trackedTurns = new Set();
   const turnOrder = [];
   const trackedTools = new Set();
-  const nearViewport = new WeakMap();
+  let nearViewport = new WeakMap();
   const pendingRoots = new Set();
 
   let observer = null;
   let intersectionObserver = null;
   let scanTimer = 0;
+  let rehydrateTimer = 0;
+  let rehydrateUntil = 0;
+  let rehydrateReason = "";
+  let lastRouteKey = `${location.pathname}${location.search}`;
   let active = false;
   let heavy = false;
   let markedToolCount = 0;
@@ -55,11 +62,77 @@
     ));
   }
 
+  function routeKey(url = location.href) {
+    try {
+      const parsed = new URL(url, location.href);
+      return parsed.origin === location.origin ? `${parsed.pathname}${parsed.search}` : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function isRehydrating() {
+    return active && (rehydrateUntil === Number.POSITIVE_INFINITY || performance.now() < rehydrateUntil);
+  }
+
+  function finishRehydrate() {
+    if (!active || rehydrateUntil === Number.POSITIVE_INFINITY) return;
+    if (performance.now() < rehydrateUntil) return;
+    rehydrateUntil = 0;
+    document.documentElement.removeAttribute(ROOT_REHYDRATE_ATTR);
+    refreshState();
+    BCG.recordTrace?.("native-tool-freeze-guard-rehydrate-done", {
+      reason: rehydrateReason,
+      toolSurfaces: trackedTools.size,
+      containedTools: containedToolCount,
+      skippedTools: skippedToolCount,
+      skippedTurns: skippedTurnCount,
+    });
+  }
+
+  function enterRehydrate(reason, { holdWhileHidden = false } = {}) {
+    if (!active) return;
+    const wasRehydrating = isRehydrating();
+    rehydrateReason = String(reason || "resume");
+    window.clearTimeout(rehydrateTimer);
+    rehydrateTimer = 0;
+    rehydrateUntil = holdWhileHidden ? Number.POSITIVE_INFINITY : performance.now() + REHYDRATE_WINDOW_MS;
+    document.documentElement.setAttribute(ROOT_REHYDRATE_ATTR, "1");
+    if (!holdWhileHidden) {
+      rehydrateTimer = window.setTimeout(finishRehydrate, REHYDRATE_WINDOW_MS + 50);
+    }
+    if (!wasRehydrating) {
+      BCG.recordTrace?.("native-tool-freeze-guard-rehydrate", {
+        reason: rehydrateReason,
+        windowMs: holdWhileHidden ? null : REHYDRATE_WINDOW_MS,
+        toolSurfaces: trackedTools.size,
+      });
+    }
+  }
+
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
+      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_REHYDRATE_ATTR}="1"] ${TURN_SELECTOR} {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 720px;
+      }
+
+      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_REHYDRATE_ATTR}="1"] ${TURN_SELECTOR} :is(
+        [data-testid*="tool" i]:not(button):not(a):not(input):not(textarea):not(select),
+        [data-testid*="connector" i]:not(button):not(a):not(input):not(textarea):not(select),
+        [data-testid*="mcp" i]:not(button):not(a):not(input):not(textarea):not(select),
+        [data-testid*="work" i]:not(button):not(a):not(input):not(textarea):not(select),
+        iframe[src*="mcp" i],
+        iframe[title*="tool" i]
+      ) {
+        contain: layout;
+        content-visibility: auto;
+        contain-intrinsic-size: auto 180px;
+      }
+
       html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TURN_SKIP_CLASS} {
         content-visibility: auto;
         contain-intrinsic-size: auto 720px;
@@ -182,6 +255,7 @@
 
   function applyVisibilityPolicy() {
     const protectedTail = protectedTailSet();
+    const warmup = isRehydrating();
     let nextSkippedTurns = 0;
     let nextContainedTools = 0;
     let nextSkippedTools = 0;
@@ -192,9 +266,10 @@
         intersectionObserver?.unobserve(turn);
         continue;
       }
+      const shouldVirtualize = warmup || nearViewport.get(turn) === false;
       const shouldSkip = active
         && heavy
-        && nearViewport.get(turn) === false
+        && shouldVirtualize
         && !protectedTail.has(turn)
         && !isInteractionProtected(turn);
       turn.classList.toggle(TURN_SKIP_CLASS, shouldSkip);
@@ -208,7 +283,8 @@
       }
       const interactionProtected = active && heavy && isInteractionProtected(tool);
       const shouldContain = active && heavy && !interactionProtected;
-      const shouldSkip = shouldContain && nearViewport.get(tool) === false;
+      const shouldVirtualize = warmup || nearViewport.get(tool) === false;
+      const shouldSkip = shouldContain && shouldVirtualize;
       tool.classList.toggle(TOOL_CONTAIN_CLASS, shouldContain);
       tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);
       if (shouldContain) nextContainedTools += 1;
@@ -237,7 +313,10 @@
     if (!active) return;
     for (const tool of Array.from(trackedTools)) if (!tool.isConnected) untrackTool(tool);
     markedToolCount = trackedTools.size;
-    const nextHeavy = generationActive() && markedToolCount >= HEAVY_TOOL_THRESHOLD;
+    const now = performance.now();
+    const rehydrateGrace = Number.isFinite(rehydrateUntil) && now < rehydrateUntil + HEAVY_RELEASE_GRACE_MS;
+    const nextHeavy = markedToolCount >= HEAVY_TOOL_THRESHOLD
+      && (generationActive() || isRehydrating() || rehydrateGrace);
     const heavyChanged = heavy !== nextHeavy;
     if (heavyChanged) {
       heavy = nextHeavy;
@@ -252,9 +331,19 @@
         containedTools: containedToolCount,
         skippedTools: skippedToolCount,
         skippedTurns: skippedTurnCount,
+        rehydrating: isRehydrating(),
+        rehydrateReason,
         generating: generationActive(),
       });
     }
+  }
+
+  function detectRouteChange(reason = "route") {
+    const nextRouteKey = `${location.pathname}${location.search}`;
+    if (nextRouteKey === lastRouteKey) return false;
+    lastRouteKey = nextRouteKey;
+    enterRehydrate(reason);
+    return true;
   }
 
   function enqueueRoot(root) {
@@ -269,6 +358,7 @@
   function runScheduledScan() {
     scanTimer = 0;
     if (!active) return;
+    detectRouteChange("route-mutation");
     const roots = Array.from(pendingRoots);
     pendingRoots.clear();
     for (const root of roots) scanRoot(root);
@@ -294,17 +384,56 @@
     observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  function handlePotentialConversationNavigation(event) {
+    if (!active) return;
+    const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    const next = routeKey(anchor.href);
+    if (!next || next === lastRouteKey) return;
+    enterRehydrate("link-navigation");
+  }
+
+  function installNavigationGuards() {
+    document.addEventListener("pointerdown", handlePotentialConversationNavigation, true);
+    document.addEventListener("click", handlePotentialConversationNavigation, true);
+    window.addEventListener("popstate", () => {
+      enterRehydrate("popstate");
+      detectRouteChange("popstate");
+    }, { passive: true });
+    window.addEventListener("hashchange", () => enterRehydrate("hashchange"), { passive: true });
+    try {
+      globalThis.navigation?.addEventListener?.("navigate", (event) => {
+        const destination = routeKey(event?.destination?.url || "");
+        if (destination && destination !== lastRouteKey) enterRehydrate("navigation-api");
+      });
+    } catch {
+      // Navigation API is optional; pointer/click/popstate + mutation fallback remain active.
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (!active) return;
+      if (document.visibilityState === "hidden") {
+        enterRehydrate("hidden", { holdWhileHidden: true });
+        return;
+      }
+      enterRehydrate("visible");
+      scanRoot(document);
+      refreshState();
+    }, { passive: true });
+  }
+
   function start() {
     if (active || !featureEnabled()) return;
     active = true;
     ensureStyle();
     document.documentElement.setAttribute(ROOT_ACTIVE_ATTR, "1");
+    enterRehydrate("startup");
     startObserver();
     scanRoot(document);
     refreshState();
     BCG.recordTrace?.("native-tool-freeze-guard-started", {
       heavyToolThreshold: HEAVY_TOOL_THRESHOLD,
       nearViewportMarginPx: NEAR_VIEWPORT_MARGIN_PX,
+      rehydrateWindowMs: REHYDRATE_WINDOW_MS,
       toolSurfaces: markedToolCount,
     });
   }
@@ -317,7 +446,11 @@
     intersectionObserver?.disconnect();
     intersectionObserver = null;
     window.clearTimeout(scanTimer);
+    window.clearTimeout(rehydrateTimer);
     scanTimer = 0;
+    rehydrateTimer = 0;
+    rehydrateUntil = 0;
+    rehydrateReason = "";
     pendingRoots.clear();
     heavy = false;
     markedToolCount = 0;
@@ -326,6 +459,7 @@
     skippedTurnCount = 0;
     document.documentElement.removeAttribute(ROOT_ACTIVE_ATTR);
     document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
+    document.documentElement.removeAttribute(ROOT_REHYDRATE_ATTR);
     for (const turn of trackedTurns) turn.classList?.remove(TURN_SKIP_CLASS);
     for (const tool of trackedTools) {
       tool.classList?.remove(TOOL_SKIP_CLASS);
@@ -334,6 +468,7 @@
     trackedTurns.clear();
     turnOrder.length = 0;
     trackedTools.clear();
+    nearViewport = new WeakMap();
     BCG.recordTrace?.("native-tool-freeze-guard-stopped", {});
   }
 
@@ -346,10 +481,12 @@
     }
   }
 
+  installNavigationGuards();
   window.addEventListener("bcg:settings-changed", syncEnabledState);
   window.addEventListener("pageshow", () => {
     syncEnabledState();
     if (active) {
+      enterRehydrate("pageshow");
       scanRoot(document);
       refreshState();
     }
@@ -357,9 +494,15 @@
 
   const api = {
     status() {
+      const remaining = isRehydrating() && Number.isFinite(rehydrateUntil)
+        ? Math.max(0, Math.round(rehydrateUntil - performance.now()))
+        : null;
       return {
         active,
         heavy,
+        rehydrating: isRehydrating(),
+        rehydrateReason,
+        rehydrateRemainingMs: remaining,
         markedToolCount: trackedTools.size,
         containedToolCount,
         skippedToolCount,
@@ -372,6 +515,7 @@
     },
     rescan() {
       if (active) {
+        enterRehydrate("manual-rescan");
         scanRoot(document);
         refreshState();
       }
