@@ -52,6 +52,8 @@ requireText(perfBackground, 'guardSkippedTools', "persist guard state in heartbe
 if (!manifest.content_scripts?.some((entry) => entry.js?.includes('performance-guard.js'))) throw new Error('performance-guard.js is not packaged');
 requireText(content, 'setManagedStyle(node, "color", "LinkText")', "user-bubble links stay blue");
 requireText(content, 'function isTransientSidebarLayer(node)', "sidebar persistence ignores transient native panels");
+requireText(content, 'const SECTION_NAMES = new Set(["projects", "chats"]);', "Pinned is not programmatically restored");
+forbidText(content, 'const SECTION_NAMES = new Set(["pinned", "projects", "chats"]);', "Pinned restoration can spawn native floating panel");
 requireText(content, 'if (text === name || ariaLabel === name) return name;', "sidebar sections require exact labels");
 forbidText(content, 'text.startsWith(`${name} `)', "sidebar section prefix matching can click native flyouts");
 requireText(content, 'node.closest(\'a[href], [role="link"]\')', "link descendants excluded from bubble text color");

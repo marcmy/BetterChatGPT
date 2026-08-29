@@ -8,7 +8,7 @@
 - Harden queued native attachments during generation: observe file-input, paste, and drop File objects without preventing or replaying ChatGPT's native upload events; wait for native upload completion before releasing a queued send.
 - Narrow page-bridge attachment metadata parsing so generic tool/search responses are no longer cloned and recursively scanned.
 - Add an adaptive **Native tool freeze guard** for the renderer hangs seen during tool-heavy generation. It isolates classified tool layout work, skips distant offscreen turns/tool surfaces, protects the newest three turns and interactive/open tool UI, and now enters a short prewarm mode *before* startup/SPA conversation rehydration and when returning from a hidden tab so an already tool-heavy conversation is contained before its first expensive paint. Hang diagnostics retain the previous 12 heartbeats plus rehydration/containment/skipping state.
-- Prevent sidebar-state persistence from mistaking ChatGPT native Pinned/Projects/Chats flyouts for the actual sidebar section controls, which could leave a duplicate floating Pinned panel open.
+- Stop programmatically restoring ChatGPT's **Pinned** section state entirely after the native Pinned control began opening a floating panel in some sidebar layouts; Projects and Chats persistence remain enabled.
 - Remove the final dead Long-chat optimizer UI remnant (Wake all messages).
 - Add a permanent regression checker covering removed v1.0.83 behaviors, live-setting bootstrap gates, native attachment ownership, link styling, and Native tool freeze guard safety invariants.
 - Raise Firefox's minimum version to 142 to match Mozilla's `data_collection_permissions` manifest support and package this pre-release internally as extension version `1.1.2`.

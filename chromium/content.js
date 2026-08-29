@@ -776,7 +776,7 @@
           description: "Keep native ChatGPT UI state predictable and reduce friction between devices.",
           fullWidth: true,
           fields: [
-            setting("navigation.persistSidebarSections", "Remember sidebar sections", "checkbox", "Restore whether Pinned, Projects, and Chats were expanded or collapsed."),
+            setting("navigation.persistSidebarSections", "Remember sidebar sections", "checkbox", "Restore whether Projects and Chats were expanded or collapsed. Pinned is left to ChatGPT because its native control can open a floating panel in some layouts."),
             setting("navigation.projectDoubleClickHome", "Double-click Project home", "checkbox", "Double-click a project in the sidebar to open its native Project home action."),
             setting("resilience.crossDeviceGuard", "Cross-device stale-chat guard", "checkbox", "Detect when another device advanced the current conversation and refresh before this tab can send from an outdated parent."),
           ],
@@ -4223,7 +4223,7 @@ html[${SIDEBAR_ATTRIBUTE}="1"] :is(
   if (!BCG) return;
 
   const STORAGE_KEY = "better-chatgpt:sidebar-sections-v1";
-  const SECTION_NAMES = new Set(["pinned", "projects", "chats"]);
+  const SECTION_NAMES = new Set(["projects", "chats"]);
   const RESTORE_DELAYS = [0, 120, 350, 800, 1600, 3000];
   let restoreGeneration = 0;
 
