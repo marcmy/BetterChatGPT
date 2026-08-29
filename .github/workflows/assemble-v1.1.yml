@@ -1,4 +1,4 @@
-name: Tag BetterChatGPT v1.1
+name: Finalize BetterChatGPT v1.1 tag
 
 on:
   workflow_dispatch:
@@ -18,18 +18,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify package and create v1.1 tag
+      - name: Wait for clean main and create v1.1 tag
         shell: bash
         run: |
           set -euo pipefail
           echo '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6  artifacts/BetterChatGPT-chromium-v1.1.zip' | sha256sum -c -
-          test "$(python3 -c 'import json; print(json.load(open("chromium/manifest.json"))["version"])')" = '1.1'
+
+          clean_sha=''
+          for _ in $(seq 1 30); do
+            git fetch origin main
+            candidate="$(git rev-parse origin/main)"
+            if ! git cat-file -e "$candidate:.github/workflows/assemble-v1.1.yml" 2>/dev/null; then
+              clean_sha="$candidate"
+              break
+            fi
+            sleep 2
+          done
+
+          test -n "$clean_sha"
+          test "$(git show "$clean_sha:chromium/manifest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')" = '1.1'
 
           if git ls-remote --exit-code --tags origin refs/tags/v1.1 >/dev/null 2>&1; then
             echo 'v1.1 tag already exists'
           else
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git tag -a v1.1 5b79e538813749b3a1cb2e38eb178cb669436471 -m 'BetterChatGPT v1.1'
+            git tag -a v1.1 "$clean_sha" -m 'BetterChatGPT v1.1'
             git push origin refs/tags/v1.1
           fi
