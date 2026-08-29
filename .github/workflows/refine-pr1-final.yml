@@ -45,15 +45,10 @@ jobs:
           bash /tmp/refine-pr1.sh
           python3 <<'PY'
           from pathlib import Path
-
           p = Path('chromium/content.js')
           text = p.read_text(encoding='utf-8')
-          old = '''    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");
-    setTimeout(() => location.reload(), 120);
-'''
-          new = '''    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");
-    dispatchSettingsChanged("tab-disabled");
-'''
+          old = '    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");\n    setTimeout(() => location.reload(), 120);\n'
+          new = '    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");\n    dispatchSettingsChanged("tab-disabled");\n'
           if text.count(old) != 1:
               raise RuntimeError(f'expected one reload-based setTabDisabled body, found {text.count(old)}')
           text = text.replace(old, new, 1)
