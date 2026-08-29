@@ -44,139 +44,38 @@ jobs:
 
           guard_path = Path('chromium/performance-guard.js')
           guard = guard_path.read_text(encoding='utf-8')
-          guard = replace_once(
-              guard,
-              '  const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";\n',
-              '  const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";\n  const TOOL_CONTAIN_CLASS = "bcg-native-freeze-guard-tool-contain";\n',
-              'tool containment class',
-          )
-          guard = replace_once(
-              guard,
-              '      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {\n        content-visibility: auto;\n        contain-intrinsic-size: auto 180px;\n      }\n',
-              '      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_CONTAIN_CLASS} {\n        contain: layout;\n      }\n\n      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {\n        content-visibility: auto;\n        contain-intrinsic-size: auto 180px;\n      }\n',
-              'balanced tool containment CSS',
-          )
-          guard = replace_once(
-              guard,
-              '  let skippedToolCount = 0;\n  let skippedTurnCount = 0;\n',
-              '  let containedToolCount = 0;\n  let skippedToolCount = 0;\n  let skippedTurnCount = 0;\n',
-              'contained tool state',
-          )
-          guard = replace_once(
-              guard,
-              '    tool.classList?.remove(TOOL_SKIP_CLASS);\n',
-              '    tool.classList?.remove(TOOL_SKIP_CLASS);\n    tool.classList?.remove(TOOL_CONTAIN_CLASS);\n',
-              'untrack tool containment cleanup',
-          )
-          guard = replace_once(
-              guard,
-              '    let nextSkippedTurns = 0;\n    let nextSkippedTools = 0;\n',
-              '    let nextSkippedTurns = 0;\n    let nextContainedTools = 0;\n    let nextSkippedTools = 0;\n',
-              'policy counters',
-          )
-          old_tool_policy = '''      const shouldSkip = active
-        && heavy
-        && nearViewport.get(tool) === false
-        && !isInteractionProtected(tool);
-      tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);
-      if (shouldSkip) nextSkippedTools += 1;
-'''
-          new_tool_policy = '''      const interactionProtected = active && heavy && isInteractionProtected(tool);
-      const shouldContain = active && heavy && !interactionProtected;
-      const shouldSkip = shouldContain && nearViewport.get(tool) === false;
-      tool.classList.toggle(TOOL_CONTAIN_CLASS, shouldContain);
-      tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);
-      if (shouldContain) nextContainedTools += 1;
-      if (shouldSkip) nextSkippedTools += 1;
-'''
+          guard = replace_once(guard, '  const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";\n', '  const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";\n  const TOOL_CONTAIN_CLASS = "bcg-native-freeze-guard-tool-contain";\n', 'tool containment class')
+          guard = replace_once(guard, '      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {\n        content-visibility: auto;\n        contain-intrinsic-size: auto 180px;\n      }\n', '      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_CONTAIN_CLASS} {\n        contain: layout;\n      }\n\n      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {\n        content-visibility: auto;\n        contain-intrinsic-size: auto 180px;\n      }\n', 'balanced tool containment CSS')
+          guard = replace_once(guard, '  let skippedToolCount = 0;\n  let skippedTurnCount = 0;\n', '  let containedToolCount = 0;\n  let skippedToolCount = 0;\n  let skippedTurnCount = 0;\n', 'contained tool state')
+          guard = replace_once(guard, '    tool.classList?.remove(TOOL_SKIP_CLASS);\n', '    tool.classList?.remove(TOOL_SKIP_CLASS);\n    tool.classList?.remove(TOOL_CONTAIN_CLASS);\n', 'untrack tool containment cleanup')
+          guard = replace_once(guard, '    let nextSkippedTurns = 0;\n    let nextSkippedTools = 0;\n', '    let nextSkippedTurns = 0;\n    let nextContainedTools = 0;\n    let nextSkippedTools = 0;\n', 'policy counters')
+          old_tool_policy = '      const shouldSkip = active\n        && heavy\n        && nearViewport.get(tool) === false\n        && !isInteractionProtected(tool);\n      tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);\n      if (shouldSkip) nextSkippedTools += 1;\n'
+          new_tool_policy = '      const interactionProtected = active && heavy && isInteractionProtected(tool);\n      const shouldContain = active && heavy && !interactionProtected;\n      const shouldSkip = shouldContain && nearViewport.get(tool) === false;\n      tool.classList.toggle(TOOL_CONTAIN_CLASS, shouldContain);\n      tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);\n      if (shouldContain) nextContainedTools += 1;\n      if (shouldSkip) nextSkippedTools += 1;\n'
           guard = replace_once(guard, old_tool_policy, new_tool_policy, 'balanced tool policy')
-          guard = replace_once(
-              guard,
-              '    skippedTurnCount = nextSkippedTurns;\n    skippedToolCount = nextSkippedTools;\n',
-              '    skippedTurnCount = nextSkippedTurns;\n    containedToolCount = nextContainedTools;\n    skippedToolCount = nextSkippedTools;\n',
-              'policy counter assignment',
-          )
-          old_refresh = '''    if (heavy !== nextHeavy) {
-      heavy = nextHeavy;
-      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");
-      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
-      BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {
-        toolSurfaces: markedToolCount,
-        toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],
-        skippedTools: skippedToolCount,
-        skippedTurns: skippedTurnCount,
-        generating: generationActive(),
-      });
-    }
-    applyVisibilityPolicy();
-'''
-          new_refresh = '''    const heavyChanged = heavy !== nextHeavy;
-    if (heavyChanged) {
-      heavy = nextHeavy;
-      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");
-      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);
-    }
-    applyVisibilityPolicy();
-    if (heavyChanged) {
-      BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {
-        toolSurfaces: markedToolCount,
-        toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],
-        containedTools: containedToolCount,
-        skippedTools: skippedToolCount,
-        skippedTurns: skippedTurnCount,
-        generating: generationActive(),
-      });
-    }
-'''
+          guard = replace_once(guard, '    skippedTurnCount = nextSkippedTurns;\n    skippedToolCount = nextSkippedTools;\n', '    skippedTurnCount = nextSkippedTurns;\n    containedToolCount = nextContainedTools;\n    skippedToolCount = nextSkippedTools;\n', 'policy counter assignment')
+          old_refresh = '    if (heavy !== nextHeavy) {\n      heavy = nextHeavy;\n      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");\n      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n      BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {\n        toolSurfaces: markedToolCount,\n        toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],\n        skippedTools: skippedToolCount,\n        skippedTurns: skippedTurnCount,\n        generating: generationActive(),\n      });\n    }\n    applyVisibilityPolicy();\n'
+          new_refresh = '    const heavyChanged = heavy !== nextHeavy;\n    if (heavyChanged) {\n      heavy = nextHeavy;\n      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");\n      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n    }\n    applyVisibilityPolicy();\n    if (heavyChanged) {\n      BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {\n        toolSurfaces: markedToolCount,\n        toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],\n        containedTools: containedToolCount,\n        skippedTools: skippedToolCount,\n        skippedTurns: skippedTurnCount,\n        generating: generationActive(),\n      });\n    }\n'
           guard = replace_once(guard, old_refresh, new_refresh, 'post-policy heavy trace')
-          guard = replace_once(
-              guard,
-              '    markedToolCount = 0;\n    skippedToolCount = 0;\n',
-              '    markedToolCount = 0;\n    containedToolCount = 0;\n    skippedToolCount = 0;\n',
-              'stop counter cleanup',
-          )
-          guard = replace_once(
-              guard,
-              '    for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);\n',
-              '    for (const tool of trackedTools) {\n      tool.classList?.remove(TOOL_SKIP_CLASS);\n      tool.classList?.remove(TOOL_CONTAIN_CLASS);\n    }\n',
-              'stop tool class cleanup',
-          )
-          guard = replace_once(
-              guard,
-              '        markedToolCount: trackedTools.size,\n        skippedToolCount,\n',
-              '        markedToolCount: trackedTools.size,\n        containedToolCount,\n        skippedToolCount,\n',
-              'guard status containment count',
-          )
+          guard = replace_once(guard, '    markedToolCount = 0;\n    skippedToolCount = 0;\n', '    markedToolCount = 0;\n    containedToolCount = 0;\n    skippedToolCount = 0;\n', 'stop counter cleanup')
+          guard = replace_once(guard, '    for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);\n', '    for (const tool of trackedTools) {\n      tool.classList?.remove(TOOL_SKIP_CLASS);\n      tool.classList?.remove(TOOL_CONTAIN_CLASS);\n    }\n', 'stop tool class cleanup')
+          guard = replace_once(guard, '        markedToolCount: trackedTools.size,\n        skippedToolCount,\n', '        markedToolCount: trackedTools.size,\n        containedToolCount,\n        skippedToolCount,\n', 'guard status containment count')
           guard_path.write_text(guard, encoding='utf-8')
 
           content_path = Path('chromium/content.js')
           content = content_path.read_text(encoding='utf-8')
-          content = replace_once(
-              content,
-              '          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),\n',
-              '          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n          guardContainedTools: Number(guardStatus?.containedToolCount || 0),\n          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),\n',
-              'heartbeat containment metric',
-          )
-          content = content.replace(
-              'Reduce renderer work from offscreen conversation/tool surfaces only during tool-heavy generation. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled.',
-              'During tool-heavy generation, isolate tool layout work and skip offscreen conversation/tool rendering while protecting the active tail and interactive tool surfaces. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled.',
-          )
+          content = replace_once(content, '          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),\n', '          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n          guardContainedTools: Number(guardStatus?.containedToolCount || 0),\n          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),\n', 'heartbeat containment metric')
+          content = content.replace('Reduce renderer work from offscreen conversation/tool surfaces only during tool-heavy generation. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled.', 'During tool-heavy generation, isolate tool layout work and skip offscreen conversation/tool rendering while protecting the active tail and interactive tool surfaces. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled.')
           content_path.write_text(content, encoding='utf-8')
 
           bg_path = Path('chromium/performance-background.js')
           bg = bg_path.read_text(encoding='utf-8')
-          bg = replace_once(
-              bg,
-              '    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n    guardSkippedTools: Number(payload.guardSkippedTools || 0),\n',
-              '    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n    guardContainedTools: Number(payload.guardContainedTools || 0),\n    guardSkippedTools: Number(payload.guardSkippedTools || 0),\n',
-              'background containment metric',
-          )
+          bg = replace_once(bg, '    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n    guardSkippedTools: Number(payload.guardSkippedTools || 0),\n', '    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n    guardContainedTools: Number(payload.guardContainedTools || 0),\n    guardSkippedTools: Number(payload.guardSkippedTools || 0),\n', 'background containment metric')
           bg_path.write_text(bg, encoding='utf-8')
 
           regression_path = Path('tools/regression-check.mjs')
           checks = regression_path.read_text(encoding='utf-8')
           anchor = 'forbidText(guard, \'contain: layout style;\', "broad tool layout containment");\n'
-          addition = anchor + '''requireText(guard, 'contain: layout;', "tool-heavy layout containment is retained without style containment");\nrequireText(guard, 'const shouldContain = active && heavy && !interactionProtected;', "tool containment protects interactive surfaces");\nrequireText(content, 'guardContainedTools', "heartbeat records contained tool count");\nrequireText(perfBackground, 'guardContainedTools', "background flight recorder retains contained tool count");\n'''
+          addition = anchor + 'requireText(guard, \'contain: layout;\', "tool-heavy layout containment is retained without style containment");\nrequireText(guard, \'const shouldContain = active && heavy && !interactionProtected;\', "tool containment protects interactive surfaces");\nrequireText(content, \'guardContainedTools\', "heartbeat records contained tool count");\nrequireText(perfBackground, \'guardContainedTools\', "background flight recorder retains contained tool count");\n'
           checks = replace_once(checks, anchor, addition, 'balanced containment regression checks')
           regression_path.write_text(checks, encoding='utf-8')
           PY
