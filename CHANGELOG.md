@@ -7,8 +7,9 @@
 - Make Smart scrolling, Queued sending, plain-text paste/copy, and edited-message attachment enhancement react to settings changes without page reloads.
 - Harden queued native attachments during generation: observe file-input, paste, and drop File objects without preventing or replaying ChatGPT's native upload events; wait for native upload completion before releasing a queued send.
 - Narrow page-bridge attachment metadata parsing so generic tool/search responses are no longer cloned and recursively scanned.
+- Add an adaptive **Native tool freeze guard** for the renderer hangs seen during tool-heavy generation. It isolates classified tool layout work only while the response is tool-heavy, skips rendering for distant offscreen turns/tool surfaces with a large viewport buffer, protects the newest three turns and interactive/open tool UI, and can be disabled independently while the Native hang recorder stays active. Hang diagnostics now retain the previous 12 heartbeats plus guard containment/skipping state.
 - Remove the final dead Long-chat optimizer UI remnant (Wake all messages).
-- Add a permanent regression checker covering removed v1.0.83 behaviors, live-setting bootstrap gates, native attachment ownership, and link styling.
+- Add a permanent regression checker covering removed v1.0.83 behaviors, live-setting bootstrap gates, native attachment ownership, link styling, and Native tool freeze guard safety invariants.
 - Raise Firefox's minimum version to 142 to match Mozilla's `data_collection_permissions` manifest support and package this pre-release internally as extension version `1.1.2`.
 
 ## 1.1-pre.1 - 2026-08-29
