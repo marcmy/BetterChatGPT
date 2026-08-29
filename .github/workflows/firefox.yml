@@ -1,21 +1,7 @@
-name: BetterChatGPT Firefox
-# Version-dynamic Firefox validation and AMO signing workflow.
+name: BetterChatGPT Firefox Release
+# Release-time Firefox validation, packaging, and optional AMO signing.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "chromium/**"
-      - "tools/build-firefox.mjs"
-      - "tools/regression-check.mjs"
-      - ".github/workflows/firefox.yml"
-  pull_request:
-    paths:
-      - "chromium/**"
-      - "tools/build-firefox.mjs"
-      - "tools/regression-check.mjs"
-      - ".github/workflows/firefox.yml"
   workflow_dispatch:
     inputs:
       sign:
@@ -28,8 +14,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: betterchatgpt-firefox-${{ github.ref }}
-  cancel-in-progress: true
+  group: betterchatgpt-firefox-release
+  cancel-in-progress: false
 
 jobs:
   firefox:
@@ -60,7 +46,7 @@ jobs:
           console.log(`label=${label}`);
           NODE
 
-      - name: Validate Chromium-source JavaScript
+      - name: Validate release source
         shell: bash
         run: |
           set -euo pipefail
@@ -70,11 +56,11 @@ jobs:
           node --check tools/build-firefox.mjs
           if [ -f tools/regression-check.mjs ]; then node tools/regression-check.mjs; fi
 
-      - name: Stage Firefox build
+      - name: Stage Firefox release build
         shell: bash
         run: node tools/build-firefox.mjs
 
-      - name: Validate Firefox manifest
+      - name: Validate Firefox release manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -96,7 +82,7 @@ jobs:
           }
           NODE
 
-      - name: Lint and package Firefox extension
+      - name: Lint and package Firefox release
         shell: bash
         env:
           VERSION_LABEL: ${{ steps.version.outputs.label }}
@@ -114,7 +100,7 @@ jobs:
           cp "$unsigned" "build/firefox/BetterChatGPT-firefox-v${VERSION_LABEL}-unsigned.zip"
 
       - name: Sign Firefox XPI with Mozilla
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.sign }}
+        if: ${{ inputs.sign }}
         shell: bash
         env:
           VERSION_LABEL: ${{ steps.version.outputs.label }}
@@ -137,7 +123,7 @@ jobs:
           test -n "$signed"
           cp "$signed" "build/firefox/BetterChatGPT-firefox-v${VERSION_LABEL}.xpi"
 
-      - name: Upload Firefox artifacts
+      - name: Upload Firefox release artifacts
         uses: actions/upload-artifact@v7
         with:
           name: BetterChatGPT-Firefox-v${{ steps.version.outputs.label }}
