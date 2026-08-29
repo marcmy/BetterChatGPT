@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Merge current pre.2 and apply refined guard
+      - name: Harden reviewed guard
         shell: bash
         run: |
           set -euo pipefail
@@ -35,35 +35,44 @@ jobs:
           git merge --no-edit origin/main
           python3 <<'PY'
           from pathlib import Path
-          import textwrap
-          workflow = Path('.github/workflows/refine-pr1.yml').read_text(encoding='utf-8')
-          start = workflow.index('      - name: Refine guard and diagnostics\n')
-          run_start = workflow.index('        run: |\n', start) + len('        run: |\n')
-          end = workflow.index('\n      - name: Validate combined PR tree', run_start)
-          Path('/tmp/refine-pr1.sh').write_text(textwrap.dedent(workflow[run_start:end]), encoding='utf-8')
-          PY
-          bash /tmp/refine-pr1.sh
-          python3 <<'PY'
-          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected one match, found {count}')
+              return text.replace(old, new, 1)
 
           guard_path = Path('chromium/performance-guard.js')
           guard = guard_path.read_text(encoding='utf-8')
-          guard = guard.replace(r'\n', '\n')
+          guard = replace_once(
+              guard,
+              '    if (element.tagName === "IFRAME") return true;\n    if (!(element instanceof HTMLElement)) return false;\n    if (NON_SURFACE_TAGS.has(element.tagName)) return false;\n',
+              '    if (!(element instanceof HTMLElement)) return false;\n    if (!element.closest(TURN_SELECTOR)) return false;\n    if (element.tagName === "IFRAME") return true;\n    if (NON_SURFACE_TAGS.has(element.tagName)) return false;\n',
+              'conversation-scoped tool classification',
+          )
+          guard = replace_once(
+              guard,
+              '      document.documentElement.toggleAttribute(ROOT_HEAVY_ATTR, heavy);\n',
+              '      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");\n      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n',
+              'heavy-mode CSS attribute value',
+          )
+          guard = replace_once(
+              guard,
+              '    heavy = false;\n    markedToolCount = trackedTools.size;\n    skippedToolCount = 0;\n    skippedTurnCount = 0;\n    document.documentElement.removeAttribute(ROOT_ACTIVE_ATTR);\n    document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n    for (const turn of trackedTurns) turn.classList?.remove(TURN_SKIP_CLASS);\n    for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);\n    BCG.recordTrace?.("native-tool-freeze-guard-stopped", {});\n',
+              '    heavy = false;\n    markedToolCount = 0;\n    skippedToolCount = 0;\n    skippedTurnCount = 0;\n    document.documentElement.removeAttribute(ROOT_ACTIVE_ATTR);\n    document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n    for (const turn of trackedTurns) turn.classList?.remove(TURN_SKIP_CLASS);\n    for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);\n    trackedTurns.clear();\n    turnOrder.length = 0;\n    trackedTools.clear();\n    BCG.recordTrace?.("native-tool-freeze-guard-stopped", {});\n',
+              'guard restart lifecycle cleanup',
+          )
           guard_path.write_text(guard, encoding='utf-8')
 
-          p = Path('chromium/content.js')
-          text = p.read_text(encoding='utf-8')
-          old = '    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");\n    setTimeout(() => location.reload(), 120);\n'
-          new = '    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");\n    dispatchSettingsChanged("tab-disabled");\n'
-          if text.count(old) != 1:
-              raise RuntimeError(f'expected one reload-based setTabDisabled body, found {text.count(old)}')
-          text = text.replace(old, new, 1)
-          if 'setTimeout(() => location.reload(), 120);' in text:
-              raise RuntimeError('forced 120ms reload remains')
-          p.write_text(text, encoding='utf-8')
+          regression_path = Path('tools/regression-check.mjs')
+          checks = regression_path.read_text(encoding='utf-8')
+          anchor = 'requireText(guard, \'const HEAVY_TOOL_THRESHOLD = 4;\', "adaptive guard heavy threshold");\n'
+          addition = anchor + '''requireText(guard, 'setAttribute(ROOT_HEAVY_ATTR, "1")', "heavy-mode CSS attribute value");\nforbidText(guard, 'toggleAttribute(ROOT_HEAVY_ATTR, heavy)', "boolean heavy attribute cannot satisfy value selector");\nrequireText(guard, '!element.closest(TURN_SELECTOR)', "tool classification stays inside conversation turns");\nrequireText(guard, 'trackedTools.clear()', "guard restart clears stale tracked tools");\nrequireText(guard, 'turnOrder.length = 0', "guard restart clears stale turn order");\n'''
+          checks = replace_once(checks, anchor, addition, 'reviewed guard regression checks')
+          regression_path.write_text(checks, encoding='utf-8')
           PY
 
-      - name: Validate combined PR tree
+      - name: Validate reviewed PR tree
         shell: bash
         run: |
           set -euo pipefail
@@ -83,13 +92,13 @@ jobs:
           npx --yes web-ext@10 lint --source-dir build/firefox-src
           git diff --check
 
-      - name: Commit and push refined PR branch
+      - name: Commit and push reviewed guard
         shell: bash
         run: |
           set -euo pipefail
-          git add chromium/content.js chromium/manifest.json chromium/performance-background.js chromium/performance-guard.js tools/regression-check.mjs CHANGELOG.md
+          git add chromium/performance-guard.js tools/regression-check.mjs
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git commit -m 'Refine adaptive native tool freeze guard'
+            git commit -m 'Harden adaptive native tool freeze guard'
           fi
           git push origin HEAD:fix/native-tool-freeze-guard
