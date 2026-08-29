@@ -1,6 +1,4 @@
-# Publishing helper for the v1.1 package staged in .release-parts.
-# Retry after repairing the corrupted staging chunk (verified b7fd0656...).
-name: Assemble BetterChatGPT v1.1
+name: Publish BetterChatGPT v1.1 release
 
 on:
   workflow_dispatch:
@@ -12,45 +10,51 @@ permissions:
   contents: write
 
 jobs:
-  assemble:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Assemble and verify v1.1
+      - name: Verify package
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          rm -rf chromium
-          mkdir -p chromium
-
-          cat .release-parts/v1.1/part-*.b64 \
-            | tr -d '\r\n' \
-            | base64 --decode \
-            > artifacts/BetterChatGPT-chromium-v1.1.zip
-
-          echo '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6  artifacts/BetterChatGPT-chromium-v1.1.zip' \
-            | sha256sum -c -
-
-          unzip -q artifacts/BetterChatGPT-chromium-v1.1.zip -d chromium
-
+          echo '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6  artifacts/BetterChatGPT-chromium-v1.1.zip' | sha256sum -c -
           test "$(python3 -c 'import json; print(json.load(open("chromium/manifest.json"))["version"])')" = '1.1'
-          printf '%s  %s\n' \
-            '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6' \
-            'BetterChatGPT-chromium-v1.1.zip' \
-            > artifacts/SHA256SUMS.txt
 
-      - name: Publish package and unpacked Chromium runtime
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cat > /tmp/release-notes.md <<'EOF'
+          ## BetterChatGPT v1.1
 
-          git add artifacts/BetterChatGPT-chromium-v1.1.zip artifacts/SHA256SUMS.txt chromium
-          git rm -r .release-parts/v1.1
+          ### Highlights
+          - Remembers Pinned, Projects, and Chats expanded/collapsed state across reloads and browser restarts.
+          - Double-click a project to open its native Project home action.
+          - Adds cross-device stale-chat protection to prevent follow-ups from sending against an outdated conversation parent after another device advances the chat.
+          - Adds a low-overhead native hang recorder for severe ChatGPT/tool-call UI freezes, including renderer-heartbeat monitoring on Chromium/Edge.
+          - Keeps queued send while removing the obsolete extension-owned live-upload path.
+          - Updates Classic Dark Gray to match the ChatGPT desktop-app dark palette.
+          - Polishes the conversation overflow menu and Share-row alignment.
+          - Removes obsolete Live uploads while generating, Focus composer, and Long-chat optimizer features now superseded by native ChatGPT behavior.
 
-          git commit -m 'Publish BetterChatGPT v1.1 Chromium package'
-          git push
+          The attached Chromium ZIP is the same package verified in-repo by SHA-256.
+          EOF
+
+          if gh release view v1.1 >/dev/null 2>&1; then
+            gh release upload v1.1 \
+              artifacts/BetterChatGPT-chromium-v1.1.zip \
+              artifacts/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create v1.1 \
+              artifacts/BetterChatGPT-chromium-v1.1.zip \
+              artifacts/SHA256SUMS.txt \
+              --target 5b79e538813749b3a1cb2e38eb178cb669436471 \
+              --title 'BetterChatGPT v1.1' \
+              --notes-file /tmp/release-notes.md
+          fi
