@@ -4231,10 +4231,18 @@ html[${SIDEBAR_ATTRIBUTE}="1"] :is(
     return String(node?.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
   }
 
+  function isTransientSidebarLayer(node) {
+    return Boolean(node?.closest?.(
+      '[role="dialog"], [role="menu"], [role="tooltip"], [data-radix-popper-content-wrapper], [data-floating-ui-portal], [data-headlessui-portal]',
+    ));
+  }
+
   function sectionName(button) {
+    if (isTransientSidebarLayer(button)) return "";
     const text = normalizedText(button);
+    const ariaLabel = String(button?.getAttribute?.("aria-label") || "").replace(/\s+/g, " ").trim().toLowerCase();
     for (const name of SECTION_NAMES) {
-      if (text === name || text.startsWith(`${name} `)) return name;
+      if (text === name || ariaLabel === name) return name;
     }
     return "";
   }
