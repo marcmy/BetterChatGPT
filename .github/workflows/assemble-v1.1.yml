@@ -1,4 +1,4 @@
-name: Publish BetterChatGPT v1.1 release
+name: Tag BetterChatGPT v1.1
 
 on:
   workflow_dispatch:
@@ -10,51 +10,26 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  tag:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Verify package
+      - name: Verify package and create v1.1 tag
         shell: bash
         run: |
           set -euo pipefail
           echo '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6  artifacts/BetterChatGPT-chromium-v1.1.zip' | sha256sum -c -
           test "$(python3 -c 'import json; print(json.load(open("chromium/manifest.json"))["version"])')" = '1.1'
 
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > /tmp/release-notes.md <<'EOF'
-          ## BetterChatGPT v1.1
-
-          ### Highlights
-          - Remembers Pinned, Projects, and Chats expanded/collapsed state across reloads and browser restarts.
-          - Double-click a project to open its native Project home action.
-          - Adds cross-device stale-chat protection to prevent follow-ups from sending against an outdated conversation parent after another device advances the chat.
-          - Adds a low-overhead native hang recorder for severe ChatGPT/tool-call UI freezes, including renderer-heartbeat monitoring on Chromium/Edge.
-          - Keeps queued send while removing the obsolete extension-owned live-upload path.
-          - Updates Classic Dark Gray to match the ChatGPT desktop-app dark palette.
-          - Polishes the conversation overflow menu and Share-row alignment.
-          - Removes obsolete Live uploads while generating, Focus composer, and Long-chat optimizer features now superseded by native ChatGPT behavior.
-
-          The attached Chromium ZIP is the same package verified in-repo by SHA-256.
-          EOF
-
-          if gh release view v1.1 >/dev/null 2>&1; then
-            gh release upload v1.1 \
-              artifacts/BetterChatGPT-chromium-v1.1.zip \
-              artifacts/SHA256SUMS.txt \
-              --clobber
+          if git ls-remote --exit-code --tags origin refs/tags/v1.1 >/dev/null 2>&1; then
+            echo 'v1.1 tag already exists'
           else
-            gh release create v1.1 \
-              artifacts/BetterChatGPT-chromium-v1.1.zip \
-              artifacts/SHA256SUMS.txt \
-              --target 5b79e538813749b3a1cb2e38eb178cb669436471 \
-              --title 'BetterChatGPT v1.1' \
-              --notes-file /tmp/release-notes.md
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a v1.1 5b79e538813749b3a1cb2e38eb178cb669436471 -m 'BetterChatGPT v1.1'
+            git push origin refs/tags/v1.1
           fi
