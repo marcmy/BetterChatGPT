@@ -5,6 +5,7 @@ const STORAGE_KEY = "better-chatgpt:perf-diagnostics-v1";
 const HANG_KEY = `${STORAGE_KEY}:hangs`;
 const HANG_AFTER_MS = 4500;
 const MAX_HANGS = 8;
+const MAX_HEARTBEATS = 12;
 const watches = new Map();
 
 function watchKey(sender, payload) {
@@ -47,22 +48,30 @@ api.runtime.onMessage.addListener((message, sender) => {
   if (existing?.timer) clearTimeout(existing.timer);
   if (existing?.suspectedAt) void markRecovered(key, new Date(now).toISOString(), now - Number(existing.lastAt || now));
 
+  const lastHeartbeat = {
+    at: new Date(Number(payload.at || now)).toISOString(),
+    path: String(payload.path || "/").slice(0, 180),
+    visibility: String(payload.visibility || "").slice(0, 20),
+    generating: Boolean(payload.generating),
+    toolSurfaces: Number(payload.toolSurfaces || 0),
+    heapUsedMb: Number(payload.heapUsedMb || 0),
+    heapLimitMb: Number(payload.heapLimitMb || 0),
+    domNodes: Number(payload.domNodes || 0),
+    messageTurns: Number(payload.messageTurns || 0),
+    codeBlocks: Number(payload.codeBlocks || 0),
+    iframes: Number(payload.iframes || 0),
+  };
+
+  const recentHeartbeats = Array.isArray(existing?.recentHeartbeats)
+    ? existing.recentHeartbeats.slice(-(MAX_HEARTBEATS - 1))
+    : [];
+  recentHeartbeats.push(lastHeartbeat);
+
   const record = {
     watchKey: key,
     lastAt: Number(payload.at || now),
-    lastHeartbeat: {
-      at: new Date(Number(payload.at || now)).toISOString(),
-      path: String(payload.path || "/").slice(0, 180),
-      visibility: String(payload.visibility || "").slice(0, 20),
-      generating: Boolean(payload.generating),
-      toolSurfaces: Number(payload.toolSurfaces || 0),
-      heapUsedMb: Number(payload.heapUsedMb || 0),
-      heapLimitMb: Number(payload.heapLimitMb || 0),
-      domNodes: Number(payload.domNodes || 0),
-      messageTurns: Number(payload.messageTurns || 0),
-      codeBlocks: Number(payload.codeBlocks || 0),
-      iframes: Number(payload.iframes || 0),
-    },
+    lastHeartbeat,
+    recentHeartbeats,
     suspectedAt: 0,
     timer: 0,
   };
@@ -75,6 +84,7 @@ api.runtime.onMessage.addListener((message, sender) => {
       detectedAt: new Date(record.suspectedAt).toISOString(),
       thresholdMs: HANG_AFTER_MS,
       lastHeartbeat: record.lastHeartbeat,
+      recentHeartbeats: record.recentHeartbeats.slice(-MAX_HEARTBEATS),
       recoveredAt: null,
     });
   }, HANG_AFTER_MS);
