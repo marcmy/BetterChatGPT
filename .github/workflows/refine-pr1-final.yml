@@ -42,38 +42,30 @@ jobs:
 
           p = Path('chromium/content.js')
           text = p.read_text(encoding='utf-8')
-          text = replace_once(
-              text,
-              '          guardHeavy: Boolean(guardStatus?.heavy),\n          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n',
-              '          guardHeavy: Boolean(guardStatus?.heavy),\n          guardRehydrating: Boolean(guardStatus?.rehydrating),\n          guardRehydrateReason: String(guardStatus?.rehydrateReason || "").slice(0, 40),\n          guardRehydrateRemainingMs: Number(guardStatus?.rehydrateRemainingMs || 0),\n          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n',
-              'heartbeat rehydration state',
-          )
+          text = replace_once(text, '          guardHeavy: Boolean(guardStatus?.heavy),\n          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n', '          guardHeavy: Boolean(guardStatus?.heavy),\n          guardRehydrating: Boolean(guardStatus?.rehydrating),\n          guardRehydrateReason: String(guardStatus?.rehydrateReason || "").slice(0, 40),\n          guardRehydrateRemainingMs: Number(guardStatus?.rehydrateRemainingMs || 0),\n          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n', 'heartbeat rehydration state')
           p.write_text(text, encoding='utf-8')
 
           p = Path('chromium/performance-background.js')
           text = p.read_text(encoding='utf-8')
-          text = replace_once(
-              text,
-              '    guardHeavy: Boolean(payload.guardHeavy),\n    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n',
-              '    guardHeavy: Boolean(payload.guardHeavy),\n    guardRehydrating: Boolean(payload.guardRehydrating),\n    guardRehydrateReason: String(payload.guardRehydrateReason || "").slice(0, 40),\n    guardRehydrateRemainingMs: Number(payload.guardRehydrateRemainingMs || 0),\n    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n',
-              'background rehydration flight recorder',
-          )
+          text = replace_once(text, '    guardHeavy: Boolean(payload.guardHeavy),\n    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n', '    guardHeavy: Boolean(payload.guardHeavy),\n    guardRehydrating: Boolean(payload.guardRehydrating),\n    guardRehydrateReason: String(payload.guardRehydrateReason || "").slice(0, 40),\n    guardRehydrateRemainingMs: Number(payload.guardRehydrateRemainingMs || 0),\n    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n', 'background rehydration flight recorder')
           p.write_text(text, encoding='utf-8')
 
           p = Path('tools/regression-check.mjs')
           text = p.read_text(encoding='utf-8')
           anchor = 'requireText(guard, \'const HEAVY_TOOL_THRESHOLD = 4;\', "adaptive guard heavy threshold");\n'
-          addition = anchor + '''requireText(guard, 'const REHYDRATE_WINDOW_MS = 3000;', "rehydration prewarm window");
-requireText(guard, 'const ROOT_REHYDRATE_ATTR = "data-bcg-native-freeze-guard-rehydrate";', "rehydration root attribute");
-requireText(guard, 'enterRehydrate("startup")', "startup prewarm before conversation hydration");
-requireText(guard, 'enterRehydrate("hidden", { holdWhileHidden: true })', "hidden tabs stay prewarmed for background tool updates");
-requireText(guard, 'globalThis.navigation?.addEventListener?.("navigate"', "SPA navigation prewarm");
-requireText(guard, 'document.addEventListener("pointerdown", handlePotentialConversationNavigation, true)', "pre-navigation pointer guard");
-requireText(guard, 'generationActive() || isRehydrating() || rehydrateGrace', "rehydration can engage heavy guard before native generating UI appears");
-requireText(guard, 'ROOT_REHYDRATE_ATTR}="1"] ${TURN_SELECTOR}', "direct CSS prewarms incoming turns before JS classification");
-requireText(content, 'guardRehydrating', "heartbeat records rehydration state");
-requireText(perfBackground, 'guardRehydrateReason', "background runway retains rehydration reason");
-'''
+          addition = (
+              anchor
+              + 'requireText(guard, \'const REHYDRATE_WINDOW_MS = 3000;\', "rehydration prewarm window");\n'
+              + 'requireText(guard, \'const ROOT_REHYDRATE_ATTR = "data-bcg-native-freeze-guard-rehydrate";\', "rehydration root attribute");\n'
+              + 'requireText(guard, \'enterRehydrate("startup")\', "startup prewarm before conversation hydration");\n'
+              + 'requireText(guard, \'enterRehydrate("hidden", { holdWhileHidden: true })\', "hidden tabs stay prewarmed for background tool updates");\n'
+              + 'requireText(guard, \'globalThis.navigation?.addEventListener?.("navigate"\', "SPA navigation prewarm");\n'
+              + 'requireText(guard, \'document.addEventListener("pointerdown", handlePotentialConversationNavigation, true)\', "pre-navigation pointer guard");\n'
+              + 'requireText(guard, \'generationActive() || isRehydrating() || rehydrateGrace\', "rehydration can engage heavy guard before native generating UI appears");\n'
+              + 'requireText(guard, \'ROOT_REHYDRATE_ATTR}="1"] ${TURN_SELECTOR}\', "direct CSS prewarms incoming turns before JS classification");\n'
+              + 'requireText(content, \'guardRehydrating\', "heartbeat records rehydration state");\n'
+              + 'requireText(perfBackground, \'guardRehydrateReason\', "background runway retains rehydration reason");\n'
+          )
           text = replace_once(text, anchor, addition, 'rehydration regression assertions')
           p.write_text(text, encoding='utf-8')
 
