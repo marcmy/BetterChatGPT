@@ -28,7 +28,11 @@ BetterChatGPT is a Chromium/Edge extension for ChatGPT focused on quality-of-lif
 
 ## Install — Edge / Chrome
 
-The v1.1 Chromium package is stored in `artifacts/BetterChatGPT-chromium-v1.1.zip`.
+**[Download BetterChatGPT v1.1 for Chromium/Edge](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-chromium-v1.1.zip)**
+
+SHA-256: `1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6`
+
+The same package and checksum file are stored under `artifacts/` in this repository.
 
 1. Extract `BetterChatGPT-chromium-v1.1.zip`.
 2. Open `edge://extensions` or `chrome://extensions`.
