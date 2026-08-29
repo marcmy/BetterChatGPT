@@ -1,0 +1,166 @@
+name: Build BetterChatGPT v1.1 pre.2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pre2-build.yml"
+
+permissions:
+  contents: write
+
+env:
+  AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+  AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Apply audited pre.2 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/workflows/firefox.yml /tmp/firefox-dynamic.yml
+          git show v1.1-pre.1:.github/workflows/firefox.yml > .github/workflows/firefox.yml
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          p = Path('chromium/content.js')
+          text = p.read_text(encoding='utf-8')
+          old = 'notify(reloadRequired ? "Saved. Reload ChatGPT to apply every change." : "Saved.");'
+          new = 'notify(reloadRequired ? "Saved. Reload ChatGPT to apply this structural change." : "Saved.");'
+          if text.count(old) != 1:
+              raise RuntimeError(f'expected one generic reload fallback, found {text.count(old)}')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          workflow = Path('.github/workflows/pre2-release.yml').read_text(encoding='utf-8')
+          start = workflow.index('      - name: Apply pre.2 fixes\n')
+          run_start = workflow.index('        run: |\n', start) + len('        run: |\n')
+          end = workflow.index('\n      - name: Validate runtime and regression guards', run_start)
+          block = textwrap.dedent(workflow[run_start:end])
+          Path('/tmp/apply-pre2.sh').write_text(block, encoding='utf-8')
+          PY
+          bash /tmp/apply-pre2.sh
+          cp /tmp/firefox-dynamic.yml .github/workflows/firefox.yml
+          git diff --exit-code -- .github/workflows/firefox.yml
+
+      - name: Validate runtime and regression guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/regression-check.mjs
+          find chromium -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
+          node --check tools/build-firefox.mjs
+          node --check tools/regression-check.mjs
+
+      - name: Build and lint Firefox package
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/build-firefox.mjs
+          node - <<'NODE'
+          const fs = require('fs');
+          const source = JSON.parse(fs.readFileSync('chromium/manifest.json', 'utf8'));
+          const m = JSON.parse(fs.readFileSync('build/firefox-src/manifest.json', 'utf8'));
+          if (source.version !== '1.1.2' || source.version_name !== '1.1-pre.2') throw new Error('Chromium pre.2 version metadata mismatch');
+          if (m.version !== '1.1.2') throw new Error(`Expected Firefox 1.1.2, got ${m.version}`);
+          if ('version_name' in m) throw new Error('Firefox manifest must not contain Chromium version_name');
+          if (m.background?.service_worker) throw new Error('Firefox service_worker declaration leaked into package');
+          if (!Array.isArray(m.background?.scripts) || !m.background.scripts.includes('performance-background.js')) throw new Error('Firefox background script missing');
+          if (m.browser_specific_settings?.gecko?.strict_min_version !== '142.0') throw new Error('Firefox minimum version mismatch');
+          NODE
+          rm -rf build/firefox
+          mkdir -p build/firefox
+          npx --yes web-ext@10 lint --source-dir build/firefox-src
+          npx --yes web-ext@10 build --source-dir build/firefox-src --artifacts-dir build/firefox --overwrite-dest
+
+      - name: Mozilla-sign Firefox pre.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${AMO_JWT_ISSUER:-}"
+          test -n "${AMO_JWT_SECRET:-}"
+          npx --yes web-ext@10 sign \
+            --source-dir build/firefox-src \
+            --artifacts-dir build/firefox \
+            --channel unlisted \
+            --approval-timeout 3600000 \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET"
+          signed=$(find build/firefox -maxdepth 1 -type f -name '*.xpi' | sort | tail -n 1)
+          test -n "$signed"
+          cp "$signed" /tmp/BetterChatGPT-firefox-v1.1-pre.2.xpi
+          unzip -t /tmp/BetterChatGPT-firefox-v1.1-pre.2.xpi >/dev/null
+          unzip -l /tmp/BetterChatGPT-firefox-v1.1-pre.2.xpi | grep -q 'META-INF/mozilla.rsa'
+
+      - name: Package Chromium pre.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/BetterChatGPT-chromium-v1.1-pre.2.zip
+          (cd chromium && zip -qr /tmp/BetterChatGPT-chromium-v1.1-pre.2.zip .)
+          unzip -t /tmp/BetterChatGPT-chromium-v1.1-pre.2.zip >/dev/null
+          unzip -p /tmp/BetterChatGPT-chromium-v1.1-pre.2.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);if(m.version!=="1.1.2"||m.version_name!=="1.1-pre.2")process.exit(1)})'
+
+      - name: Finalize documentation and artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          chromium_sha=$(sha256sum /tmp/BetterChatGPT-chromium-v1.1-pre.2.zip | awk '{print $1}')
+          firefox_sha=$(sha256sum /tmp/BetterChatGPT-firefox-v1.1-pre.2.xpi | awk '{print $1}')
+          export chromium_sha firefox_sha
+          rm -f artifacts/BetterChatGPT-chromium-v1.1.zip artifacts/BetterChatGPT-firefox-v1.1.xpi
+          cp /tmp/BetterChatGPT-chromium-v1.1-pre.2.zip artifacts/
+          cp /tmp/BetterChatGPT-firefox-v1.1-pre.2.xpi artifacts/
+          printf '%s  %s\n%s  %s\n' \
+            "$chromium_sha" 'BetterChatGPT-chromium-v1.1-pre.2.zip' \
+            "$firefox_sha" 'BetterChatGPT-firefox-v1.1-pre.2.xpi' \
+            > artifacts/SHA256SUMS.txt
+          python3 <<'PY'
+          from pathlib import Path
+          import os, re
+          p = Path('README.md')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('## v1.1 highlights', '## v1.1 pre-release highlights')
+          text = re.sub(
+              r'\*\*\[Download BetterChatGPT v1\.1 for Chromium/Edge\]\([^\n]+\)\*\*\n\nSHA-256: `[^`]+`',
+              f'**[Download BetterChatGPT v1.1 pre.2 for Chromium/Edge](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-chromium-v1.1-pre.2.zip)**\n\nSHA-256: `{os.environ["chromium_sha"]}`',
+              text,
+          )
+          text = re.sub(
+              r'\*\*\[Download Mozilla-signed BetterChatGPT v1\.1 for Firefox\]\([^\n]+\)\*\*\n\nSHA-256: `[^`]+`',
+              f'**[Download Mozilla-signed BetterChatGPT v1.1 pre.2 for Firefox](https://github.com/marcmy/BetterChatGPT/raw/main/artifacts/BetterChatGPT-firefox-v1.1-pre.2.xpi)**\n\nSHA-256: `{os.environ["firefox_sha"]}`',
+              text,
+          )
+          text = text.replace('Most layout/appearance changes apply immediately. Structural behavior is safest to test after **Reload ChatGPT**.', 'All regular settings apply immediately; **Reload ChatGPT** remains available only as a manual troubleshooting action.')
+          text = text.replace('produces `BetterChatGPT-firefox-v1.1.xpi` as an Actions artifact.', 'produces the current versioned signed XPI as an Actions artifact.')
+          p.write_text(text, encoding='utf-8')
+          PY
+          node tools/regression-check.mjs
+          sha256sum -c artifacts/SHA256SUMS.txt --ignore-missing
+
+      - name: Commit validated pre.2 source and packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add chromium tools README.md CHANGELOG.md AMO_REVIEW_NOTES.md artifacts
+          git diff --cached --check
+          git commit -m 'Prepare BetterChatGPT v1.1 pre.2'
+          git push origin HEAD:main
