@@ -1,0 +1,54 @@
+name: Assemble BetterChatGPT v1.1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/assemble-v1.1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Assemble and verify v1.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          rm -rf chromium
+          mkdir -p chromium
+
+          cat .release-parts/v1.1/part-*.b64 \
+            | tr -d '\r\n' \
+            | base64 --decode \
+            > artifacts/BetterChatGPT-chromium-v1.1.zip
+
+          echo '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6  artifacts/BetterChatGPT-chromium-v1.1.zip' \
+            | sha256sum -c -
+
+          unzip -q artifacts/BetterChatGPT-chromium-v1.1.zip -d chromium
+
+          test "$(python3 -c 'import json; print(json.load(open("chromium/manifest.json"))["version"])')" = '1.1'
+          printf '%s  %s\n' \
+            '1bae81ab244260292144481b72f68bf16928dd35ce8427fa78467fe6185720b6' \
+            'BetterChatGPT-chromium-v1.1.zip' \
+            > artifacts/SHA256SUMS.txt
+
+      - name: Publish package and unpacked Chromium runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git add artifacts/BetterChatGPT-chromium-v1.1.zip artifacts/SHA256SUMS.txt chromium
+          git rm -r .release-parts/v1.1
+
+          git commit -m 'Publish BetterChatGPT v1.1 Chromium package'
+          git push
