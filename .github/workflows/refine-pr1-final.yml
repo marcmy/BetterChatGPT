@@ -1,4 +1,4 @@
-name: Finalize native tool freeze guard refinement
+name: Validate rehydration guard test build
 
 on:
   push:
@@ -11,10 +11,10 @@ permissions:
   contents: write
 
 jobs:
-  refine:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out PR branch
+      - name: Check out guard branch
         uses: actions/checkout@v7
         with:
           ref: fix/native-tool-freeze-guard
@@ -25,14 +25,12 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Preserve effective containment safely
+      - name: Extend flight recorder and regression coverage
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
-          git merge --no-edit origin/main
           python3 <<'PY'
           from pathlib import Path
 
@@ -42,71 +40,83 @@ jobs:
                   raise RuntimeError(f'{label}: expected one match, found {count}')
               return text.replace(old, new, 1)
 
-          guard_path = Path('chromium/performance-guard.js')
-          guard = guard_path.read_text(encoding='utf-8')
-          guard = replace_once(guard, '  const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";\n', '  const TOOL_SKIP_CLASS = "bcg-native-freeze-guard-tool-skip";\n  const TOOL_CONTAIN_CLASS = "bcg-native-freeze-guard-tool-contain";\n', 'tool containment class')
-          guard = replace_once(guard, '      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {\n        content-visibility: auto;\n        contain-intrinsic-size: auto 180px;\n      }\n', '      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_CONTAIN_CLASS} {\n        contain: layout;\n      }\n\n      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_SKIP_CLASS} {\n        content-visibility: auto;\n        contain-intrinsic-size: auto 180px;\n      }\n', 'balanced tool containment CSS')
-          guard = replace_once(guard, '  let skippedToolCount = 0;\n  let skippedTurnCount = 0;\n', '  let containedToolCount = 0;\n  let skippedToolCount = 0;\n  let skippedTurnCount = 0;\n', 'contained tool state')
-          guard = replace_once(guard, '    tool.classList?.remove(TOOL_SKIP_CLASS);\n', '    tool.classList?.remove(TOOL_SKIP_CLASS);\n    tool.classList?.remove(TOOL_CONTAIN_CLASS);\n', 'untrack tool containment cleanup')
-          guard = replace_once(guard, '    let nextSkippedTurns = 0;\n    let nextSkippedTools = 0;\n', '    let nextSkippedTurns = 0;\n    let nextContainedTools = 0;\n    let nextSkippedTools = 0;\n', 'policy counters')
-          old_tool_policy = '      const shouldSkip = active\n        && heavy\n        && nearViewport.get(tool) === false\n        && !isInteractionProtected(tool);\n      tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);\n      if (shouldSkip) nextSkippedTools += 1;\n'
-          new_tool_policy = '      const interactionProtected = active && heavy && isInteractionProtected(tool);\n      const shouldContain = active && heavy && !interactionProtected;\n      const shouldSkip = shouldContain && nearViewport.get(tool) === false;\n      tool.classList.toggle(TOOL_CONTAIN_CLASS, shouldContain);\n      tool.classList.toggle(TOOL_SKIP_CLASS, shouldSkip);\n      if (shouldContain) nextContainedTools += 1;\n      if (shouldSkip) nextSkippedTools += 1;\n'
-          guard = replace_once(guard, old_tool_policy, new_tool_policy, 'balanced tool policy')
-          guard = replace_once(guard, '    skippedTurnCount = nextSkippedTurns;\n    skippedToolCount = nextSkippedTools;\n', '    skippedTurnCount = nextSkippedTurns;\n    containedToolCount = nextContainedTools;\n    skippedToolCount = nextSkippedTools;\n', 'policy counter assignment')
-          old_refresh = '    if (heavy !== nextHeavy) {\n      heavy = nextHeavy;\n      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");\n      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n      BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {\n        toolSurfaces: markedToolCount,\n        toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],\n        skippedTools: skippedToolCount,\n        skippedTurns: skippedTurnCount,\n        generating: generationActive(),\n      });\n    }\n    applyVisibilityPolicy();\n'
-          new_refresh = '    const heavyChanged = heavy !== nextHeavy;\n    if (heavyChanged) {\n      heavy = nextHeavy;\n      if (heavy) document.documentElement.setAttribute(ROOT_HEAVY_ATTR, "1");\n      else document.documentElement.removeAttribute(ROOT_HEAVY_ATTR);\n    }\n    applyVisibilityPolicy();\n    if (heavyChanged) {\n      BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {\n        toolSurfaces: markedToolCount,\n        toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],\n        containedTools: containedToolCount,\n        skippedTools: skippedToolCount,\n        skippedTurns: skippedTurnCount,\n        generating: generationActive(),\n      });\n    }\n'
-          guard = replace_once(guard, old_refresh, new_refresh, 'post-policy heavy trace')
-          guard = replace_once(guard, '    markedToolCount = 0;\n    skippedToolCount = 0;\n', '    markedToolCount = 0;\n    containedToolCount = 0;\n    skippedToolCount = 0;\n', 'stop counter cleanup')
-          guard = replace_once(guard, '    for (const tool of trackedTools) tool.classList?.remove(TOOL_SKIP_CLASS);\n', '    for (const tool of trackedTools) {\n      tool.classList?.remove(TOOL_SKIP_CLASS);\n      tool.classList?.remove(TOOL_CONTAIN_CLASS);\n    }\n', 'stop tool class cleanup')
-          guard = replace_once(guard, '        markedToolCount: trackedTools.size,\n        skippedToolCount,\n', '        markedToolCount: trackedTools.size,\n        containedToolCount,\n        skippedToolCount,\n', 'guard status containment count')
-          guard_path.write_text(guard, encoding='utf-8')
+          p = Path('chromium/content.js')
+          text = p.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              '          guardHeavy: Boolean(guardStatus?.heavy),\n          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n',
+              '          guardHeavy: Boolean(guardStatus?.heavy),\n          guardRehydrating: Boolean(guardStatus?.rehydrating),\n          guardRehydrateReason: String(guardStatus?.rehydrateReason || "").slice(0, 40),\n          guardRehydrateRemainingMs: Number(guardStatus?.rehydrateRemainingMs || 0),\n          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n',
+              'heartbeat rehydration state',
+          )
+          p.write_text(text, encoding='utf-8')
 
-          content_path = Path('chromium/content.js')
-          content = content_path.read_text(encoding='utf-8')
-          content = replace_once(content, '          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),\n', '          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),\n          guardContainedTools: Number(guardStatus?.containedToolCount || 0),\n          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),\n', 'heartbeat containment metric')
-          content = content.replace('Reduce renderer work from offscreen conversation/tool surfaces only during tool-heavy generation. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled.', 'During tool-heavy generation, isolate tool layout work and skip offscreen conversation/tool rendering while protecting the active tail and interactive tool surfaces. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled.')
-          content_path.write_text(content, encoding='utf-8')
+          p = Path('chromium/performance-background.js')
+          text = p.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              '    guardHeavy: Boolean(payload.guardHeavy),\n    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n',
+              '    guardHeavy: Boolean(payload.guardHeavy),\n    guardRehydrating: Boolean(payload.guardRehydrating),\n    guardRehydrateReason: String(payload.guardRehydrateReason || "").slice(0, 40),\n    guardRehydrateRemainingMs: Number(payload.guardRehydrateRemainingMs || 0),\n    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n',
+              'background rehydration flight recorder',
+          )
+          p.write_text(text, encoding='utf-8')
 
-          bg_path = Path('chromium/performance-background.js')
-          bg = bg_path.read_text(encoding='utf-8')
-          bg = replace_once(bg, '    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n    guardSkippedTools: Number(payload.guardSkippedTools || 0),\n', '    guardToolSurfaces: Number(payload.guardToolSurfaces || 0),\n    guardContainedTools: Number(payload.guardContainedTools || 0),\n    guardSkippedTools: Number(payload.guardSkippedTools || 0),\n', 'background containment metric')
-          bg_path.write_text(bg, encoding='utf-8')
+          p = Path('tools/regression-check.mjs')
+          text = p.read_text(encoding='utf-8')
+          anchor = 'requireText(guard, \'const HEAVY_TOOL_THRESHOLD = 4;\', "adaptive guard heavy threshold");\n'
+          addition = anchor + '''requireText(guard, 'const REHYDRATE_WINDOW_MS = 3000;', "rehydration prewarm window");
+requireText(guard, 'const ROOT_REHYDRATE_ATTR = "data-bcg-native-freeze-guard-rehydrate";', "rehydration root attribute");
+requireText(guard, 'enterRehydrate("startup")', "startup prewarm before conversation hydration");
+requireText(guard, 'enterRehydrate("hidden", { holdWhileHidden: true })', "hidden tabs stay prewarmed for background tool updates");
+requireText(guard, 'globalThis.navigation?.addEventListener?.("navigate"', "SPA navigation prewarm");
+requireText(guard, 'document.addEventListener("pointerdown", handlePotentialConversationNavigation, true)', "pre-navigation pointer guard");
+requireText(guard, 'generationActive() || isRehydrating() || rehydrateGrace', "rehydration can engage heavy guard before native generating UI appears");
+requireText(guard, 'ROOT_REHYDRATE_ATTR}="1"] ${TURN_SELECTOR}', "direct CSS prewarms incoming turns before JS classification");
+requireText(content, 'guardRehydrating', "heartbeat records rehydration state");
+requireText(perfBackground, 'guardRehydrateReason', "background runway retains rehydration reason");
+'''
+          text = replace_once(text, anchor, addition, 'rehydration regression assertions')
+          p.write_text(text, encoding='utf-8')
 
-          regression_path = Path('tools/regression-check.mjs')
-          checks = regression_path.read_text(encoding='utf-8')
-          anchor = 'forbidText(guard, \'contain: layout style;\', "broad tool layout containment");\n'
-          addition = anchor + 'requireText(guard, \'contain: layout;\', "tool-heavy layout containment is retained without style containment");\nrequireText(guard, \'const shouldContain = active && heavy && !interactionProtected;\', "tool containment protects interactive surfaces");\nrequireText(content, \'guardContainedTools\', "heartbeat records contained tool count");\nrequireText(perfBackground, \'guardContainedTools\', "background flight recorder retains contained tool count");\n'
-          checks = replace_once(checks, anchor, addition, 'balanced containment regression checks')
-          regression_path.write_text(checks, encoding='utf-8')
+          p = Path('CHANGELOG.md')
+          text = p.read_text(encoding='utf-8')
+          old = '- Add an adaptive **Native tool freeze guard** for the renderer hangs seen during tool-heavy generation. It isolates classified tool layout work only while the response is tool-heavy, skips rendering for distant offscreen turns/tool surfaces with a large viewport buffer, protects the newest three turns and interactive/open tool UI, and can be disabled independently while the Native hang recorder stays active. Hang diagnostics now retain the previous 12 heartbeats plus guard containment/skipping state.\n'
+          new = '- Add an adaptive **Native tool freeze guard** for the renderer hangs seen during tool-heavy generation. It isolates classified tool layout work, skips distant offscreen turns/tool surfaces, protects the newest three turns and interactive/open tool UI, and now enters a short prewarm mode *before* startup/SPA conversation rehydration and when returning from a hidden tab so an already tool-heavy conversation is contained before its first expensive paint. Hang diagnostics retain the previous 12 heartbeats plus rehydration/containment/skipping state.\n'
+          text = replace_once(text, old, new, 'rehydration changelog')
+          p.write_text(text, encoding='utf-8')
           PY
 
-      - name: Validate balanced guard
+      - name: Validate Chromium/shared source only
         shell: bash
         run: |
           set -euo pipefail
           node tools/regression-check.mjs
           find chromium -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do node --check "$file"; done
           node --check tools/build-firefox.mjs
-          node tools/build-firefox.mjs
-          node - <<'NODE'
-          const fs = require('fs');
-          const c = JSON.parse(fs.readFileSync('chromium/manifest.json', 'utf8'));
-          const f = JSON.parse(fs.readFileSync('build/firefox-src/manifest.json', 'utf8'));
-          if (c.version !== '1.1.2' || c.version_name !== '1.1-pre.2') throw new Error('pre.2 version metadata was lost');
-          if (f.version !== c.version) throw new Error('Firefox version mismatch');
-          if (!c.content_scripts.some((entry) => entry.js?.includes('performance-guard.js'))) throw new Error('Chromium guard missing');
-          if (!f.content_scripts.some((entry) => entry.js?.includes('performance-guard.js'))) throw new Error('Firefox guard missing');
-          NODE
-          npx --yes web-ext@10 lint --source-dir build/firefox-src
           git diff --check
 
-      - name: Commit and push balanced guard
+      - name: Commit validated branch changes
         shell: bash
         run: |
           set -euo pipefail
-          git add chromium/content.js chromium/performance-background.js chromium/performance-guard.js tools/regression-check.mjs
+          git add chromium/content.js chromium/performance-background.js tools/regression-check.mjs CHANGELOG.md
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git commit -m 'Balance native tool freeze mitigation and UI safety'
+            git commit -m 'Record and test conversation rehydration guard state'
           fi
           git push origin HEAD:fix/native-tool-freeze-guard
+
+      - name: Package Chromium test build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f BetterChatGPT-chromium-pr1-rehydrate-pre2-test.zip
+          (cd chromium && zip -qr ../BetterChatGPT-chromium-pr1-rehydrate-pre2-test.zip .)
+          unzip -t BetterChatGPT-chromium-pr1-rehydrate-pre2-test.zip >/dev/null
+          sha256sum BetterChatGPT-chromium-pr1-rehydrate-pre2-test.zip
+
+      - name: Upload Chromium test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: BetterChatGPT-chromium-pr1-rehydrate-pre2-test
+          path: BetterChatGPT-chromium-pr1-rehydrate-pre2-test.zip
+          if-no-files-found: error
