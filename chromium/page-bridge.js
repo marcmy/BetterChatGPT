@@ -72,7 +72,7 @@
   }
 
   async function observeAttachmentMetadataResponse(response, path = "") {
-    if (!response?.ok || !/file|library|mention|search/i.test(String(path))) return;
+    if (!response?.ok || !/file|library|mention|attachment|upload/i.test(String(path))) return;
     const type = String(response.headers?.get?.("content-type") || "").toLowerCase();
     if (!type.includes("json")) return;
     try {
@@ -939,7 +939,7 @@
       }
 
       const interestingPath = pathOnly(request.url);
-      const interesting = /file|upload|attachment|library|mention|search/i.test(interestingPath);
+      const interesting = /file|upload|attachment|library|mention/i.test(interestingPath);
       if (interesting) {
         this.addEventListener("loadend", () => {
           if (responseSucceeded(this.status)) rememberAttachmentMetadata(xhrJson(this, null));

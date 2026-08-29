@@ -1,4 +1,5 @@
 name: BetterChatGPT Firefox
+# Version-dynamic Firefox validation and AMO signing workflow.
 
 on:
   push:

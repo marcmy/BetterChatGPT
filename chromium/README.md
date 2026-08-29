@@ -2,7 +2,7 @@
 
 BetterChatGPT is a Chromium/Edge extension for ChatGPT focused on quality-of-life improvements, customization, resilience, and diagnostics without replacing ChatGPT's native workflow.
 
-## v1.1 highlights
+## v1.1 pre-release highlights
 
 - **Sidebar state persistence** — remembers whether Pinned, Projects, and Chats are expanded or collapsed across reloads and browser restarts.
 - **Project home shortcut** — double-click a project in the sidebar to invoke ChatGPT's existing **Project home** action; the normal `...` menu item remains available.
@@ -28,9 +28,9 @@ BetterChatGPT is a Chromium/Edge extension for ChatGPT focused on quality-of-lif
 
 ## Install — Edge / Chrome
 
-The repository includes an unpacked extension in [`chromium/`](chromium/) and a ready-to-extract ZIP in [`artifacts/Better-ChatGPT-chromium-v1.1.zip`](artifacts/Better-ChatGPT-chromium-v1.1.zip).
+The repository includes an unpacked extension in [`chromium/`](chromium/) and a ready-to-extract ZIP in [`artifacts/BetterChatGPT-chromium-v1.1-pre.2.zip`](artifacts/BetterChatGPT-chromium-v1.1-pre.2.zip).
 
-1. Extract `Better-ChatGPT-chromium-v1.1.zip`.
+1. Extract `BetterChatGPT-chromium-v1.1-pre.2.zip`.
 2. Open `edge://extensions` or `chrome://extensions`.
 3. Enable **Developer mode**.
 4. Choose **Load unpacked** and select the extracted folder.
@@ -39,7 +39,7 @@ You can also clone/download the repository and load the `chromium` directory dir
 
 ## Settings
 
-Click the floating **B+** button in ChatGPT and choose **Settings…**. Most layout/appearance changes apply immediately. Structural behavior is safest to test after **Reload ChatGPT**.
+Click the floating **B+** button in ChatGPT and choose **Settings…**. All regular settings apply immediately; **Reload ChatGPT** remains available only as a manual troubleshooting action.
 
 The **Native hang recorder** lives under Advanced and intentionally remains active when BetterChatGPT's **Master enable** is off. This allows an A/B reproduction where BetterChatGPT's normal features are dormant but the recorder can still capture evidence from a native ChatGPT freeze. Disabling the extension itself from the browser's extension manager disables the recorder as well.
 

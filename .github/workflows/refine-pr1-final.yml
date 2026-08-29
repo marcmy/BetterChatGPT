@@ -1,0 +1,95 @@
+name: Finalize native tool freeze guard refinement
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/refine-pr1-final.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/native-tool-freeze-guard
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Merge current pre.2 and apply refined guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git merge --no-edit origin/main
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+          workflow = Path('.github/workflows/refine-pr1.yml').read_text(encoding='utf-8')
+          start = workflow.index('      - name: Refine guard and diagnostics\n')
+          run_start = workflow.index('        run: |\n', start) + len('        run: |\n')
+          end = workflow.index('\n      - name: Validate combined PR tree', run_start)
+          Path('/tmp/refine-pr1.sh').write_text(textwrap.dedent(workflow[run_start:end]), encoding='utf-8')
+          PY
+          bash /tmp/refine-pr1.sh
+          python3 <<'PY'
+          from pathlib import Path
+
+          guard_path = Path('chromium/performance-guard.js')
+          guard = guard_path.read_text(encoding='utf-8')
+          guard = guard.replace(r'\n', '\n')
+          guard_path.write_text(guard, encoding='utf-8')
+
+          p = Path('chromium/content.js')
+          text = p.read_text(encoding='utf-8')
+          old = '    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");\n    setTimeout(() => location.reload(), 120);\n'
+          new = '    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");\n    dispatchSettingsChanged("tab-disabled");\n'
+          if text.count(old) != 1:
+              raise RuntimeError(f'expected one reload-based setTabDisabled body, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          if 'setTimeout(() => location.reload(), 120);' in text:
+              raise RuntimeError('forced 120ms reload remains')
+          p.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate combined PR tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/regression-check.mjs
+          find chromium -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do node --check "$file"; done
+          node --check tools/build-firefox.mjs
+          node tools/build-firefox.mjs
+          node - <<'NODE'
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync('chromium/manifest.json', 'utf8'));
+          const f = JSON.parse(fs.readFileSync('build/firefox-src/manifest.json', 'utf8'));
+          if (c.version !== '1.1.2' || c.version_name !== '1.1-pre.2') throw new Error('pre.2 version metadata was lost');
+          if (f.version !== c.version) throw new Error('Firefox version mismatch');
+          if (!c.content_scripts.some((entry) => entry.js?.includes('performance-guard.js'))) throw new Error('Chromium guard missing');
+          if (!f.content_scripts.some((entry) => entry.js?.includes('performance-guard.js'))) throw new Error('Firefox guard missing');
+          NODE
+          npx --yes web-ext@10 lint --source-dir build/firefox-src
+          git diff --check
+
+      - name: Commit and push refined PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add chromium/content.js chromium/manifest.json chromium/performance-background.js chromium/performance-guard.js tools/regression-check.mjs CHANGELOG.md
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m 'Refine adaptive native tool freeze guard'
+          fi
+          git push origin HEAD:fix/native-tool-freeze-guard

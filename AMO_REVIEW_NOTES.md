@@ -17,7 +17,7 @@ The transform only changes Firefox-specific manifest metadata:
 - replaces the Chromium MV3 `background.service_worker` declaration with Firefox MV3 `background.scripts`;
 - adds the stable Gecko ID `better-chatgpt@marcmy.github.io`;
 - declares `data_collection_permissions.required = ["none"]`;
-- sets Firefox minimum version 140.
+- sets Firefox minimum version 142.
 
 No JavaScript is minified, obfuscated, downloaded, or generated from remote code.
 
