@@ -39,6 +39,22 @@ The same package and checksum file are stored under `artifacts/` in this reposit
 3. Enable **Developer mode**.
 4. Choose **Load unpacked** and select the extracted folder.
 
+## Firefox
+
+Firefox packaging is generated from the same committed runtime with `tools/build-firefox.mjs`. The transform replaces Chromium's MV3 background service worker declaration with Firefox's background script declaration and adds the stable Gecko ID `better-chatgpt@marcmy.github.io` plus the required Mozilla data-collection declaration.
+
+Every push that changes the runtime runs JavaScript validation, `web-ext lint`, and an unsigned Firefox package build in GitHub Actions. A manual **BetterChatGPT Firefox** workflow run with **Sign the Firefox XPI with Mozilla AMO** enabled uses the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` to request an unlisted Mozilla signature and produces `BetterChatGPT-firefox-v1.1.xpi` as an Actions artifact.
+
+Local Firefox packaging:
+
+```bash
+node tools/build-firefox.mjs
+npx --yes web-ext@10 lint --source-dir build/firefox-src
+npx --yes web-ext@10 build --source-dir build/firefox-src --artifacts-dir build/firefox --overwrite-dest
+```
+
+See `AMO_REVIEW_NOTES.md` for Mozilla reviewer/build notes.
+
 ## Settings
 
 Click the floating **B+** button in ChatGPT and choose **Settings…**. Most layout/appearance changes apply immediately. Structural behavior is safest to test after **Reload ChatGPT**.
