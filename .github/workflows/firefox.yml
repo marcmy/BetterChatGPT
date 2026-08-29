@@ -7,11 +7,13 @@ on:
     paths:
       - "chromium/**"
       - "tools/build-firefox.mjs"
+      - "tools/regression-check.mjs"
       - ".github/workflows/firefox.yml"
   pull_request:
     paths:
       - "chromium/**"
       - "tools/build-firefox.mjs"
+      - "tools/regression-check.mjs"
       - ".github/workflows/firefox.yml"
   workflow_dispatch:
     inputs:
@@ -44,6 +46,19 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('chromium/manifest.json', 'utf8'));
+          const label = String(m.version_name || m.version).replace(/[^0-9A-Za-z._-]+/g, '-');
+          console.log(`manifest=${m.version}`);
+          console.log(`label=${label}`);
+          NODE
+
       - name: Validate Chromium-source JavaScript
         shell: bash
         run: |
@@ -51,6 +66,8 @@ jobs:
           find chromium -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
             node --check "$file"
           done
+          node --check tools/build-firefox.mjs
+          if [ -f tools/regression-check.mjs ]; then node tools/regression-check.mjs; fi
 
       - name: Stage Firefox build
         shell: bash
@@ -62,8 +79,10 @@ jobs:
           set -euo pipefail
           node - <<'NODE'
           const fs = require('fs');
+          const source = JSON.parse(fs.readFileSync('chromium/manifest.json', 'utf8'));
           const m = JSON.parse(fs.readFileSync('build/firefox-src/manifest.json', 'utf8'));
-          if (m.version !== '1.1') throw new Error(`Expected v1.1, got ${m.version}`);
+          if (m.version !== source.version) throw new Error(`Firefox version ${m.version} does not match source ${source.version}`);
+          if ('version_name' in m) throw new Error('Firefox manifest still contains Chromium version_name');
           if (m.background?.service_worker) throw new Error('Firefox manifest still contains background.service_worker');
           if (!Array.isArray(m.background?.scripts) || !m.background.scripts.includes('performance-background.js')) {
             throw new Error('Firefox background script fallback missing');
@@ -78,6 +97,8 @@ jobs:
 
       - name: Lint and package Firefox extension
         shell: bash
+        env:
+          VERSION_LABEL: ${{ steps.version.outputs.label }}
         run: |
           set -euo pipefail
           rm -rf build/firefox
@@ -89,11 +110,13 @@ jobs:
             --overwrite-dest
           unsigned=$(find build/firefox -maxdepth 1 -type f -name '*.zip' | head -n 1)
           test -n "$unsigned"
-          cp "$unsigned" build/firefox/BetterChatGPT-firefox-v1.1-unsigned.zip
+          cp "$unsigned" "build/firefox/BetterChatGPT-firefox-v${VERSION_LABEL}-unsigned.zip"
 
       - name: Sign Firefox XPI with Mozilla
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.sign }}
         shell: bash
+        env:
+          VERSION_LABEL: ${{ steps.version.outputs.label }}
         run: |
           set -euo pipefail
           if [ -z "${AMO_JWT_ISSUER:-}" ] || [ -z "${AMO_JWT_SECRET:-}" ]; then
@@ -111,11 +134,11 @@ jobs:
 
           signed=$(find build/firefox -maxdepth 1 -type f -name '*.xpi' | sort | tail -n 1)
           test -n "$signed"
-          cp "$signed" build/firefox/BetterChatGPT-firefox-v1.1.xpi
+          cp "$signed" "build/firefox/BetterChatGPT-firefox-v${VERSION_LABEL}.xpi"
 
       - name: Upload Firefox artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: BetterChatGPT-Firefox-1.1
+          name: BetterChatGPT-Firefox-v${{ steps.version.outputs.label }}
           path: build/firefox/*
           if-no-files-found: error
