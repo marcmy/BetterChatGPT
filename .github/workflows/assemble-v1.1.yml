@@ -1,3 +1,4 @@
+# Publishing helper for the v1.1 package staged in .release-parts.
 name: Assemble BetterChatGPT v1.1
 
 on:
