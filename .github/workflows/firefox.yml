@@ -92,7 +92,7 @@ jobs:
           cp "$unsigned" build/firefox/BetterChatGPT-firefox-v1.1-unsigned.zip
 
       - name: Sign Firefox XPI with Mozilla
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.sign) || (github.event_name == 'push' && github.event.head_commit.message == 'Trigger signed Firefox v1.1 build') }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.sign }}
         shell: bash
         run: |
           set -euo pipefail
