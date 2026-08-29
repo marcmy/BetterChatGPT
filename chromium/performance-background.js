@@ -1,5 +1,6 @@
 "use strict";
 
+const api = typeof browser !== "undefined" ? browser : chrome;
 const STORAGE_KEY = "better-chatgpt:perf-diagnostics-v1";
 const HANG_KEY = `${STORAGE_KEY}:hangs`;
 const HANG_AFTER_MS = 4500;
@@ -12,13 +13,13 @@ function watchKey(sender, payload) {
 
 async function storeHang(hang) {
   try {
-    const stored = await chrome.storage.local.get(HANG_KEY);
+    const stored = await api.storage.local.get(HANG_KEY);
     const hangs = Array.isArray(stored?.[HANG_KEY]) ? stored[HANG_KEY] : [];
     const existing = hangs.findIndex((item) => item?.watchKey === hang.watchKey && !item?.recoveredAt);
     if (existing >= 0) hangs[existing] = { ...hang };
     else hangs.push(hang);
     if (hangs.length > MAX_HANGS) hangs.splice(0, hangs.length - MAX_HANGS);
-    await chrome.storage.local.set({ [HANG_KEY]: hangs });
+    await api.storage.local.set({ [HANG_KEY]: hangs });
   } catch {
     // The watchdog must never make the extension less reliable.
   }
@@ -26,18 +27,18 @@ async function storeHang(hang) {
 
 async function markRecovered(key, recoveredAt, gapMs) {
   try {
-    const stored = await chrome.storage.local.get(HANG_KEY);
+    const stored = await api.storage.local.get(HANG_KEY);
     const hangs = Array.isArray(stored?.[HANG_KEY]) ? stored[HANG_KEY] : [];
     const index = [...hangs].map((item) => item?.watchKey).lastIndexOf(key);
     if (index < 0 || hangs[index]?.recoveredAt) return;
     hangs[index] = { ...hangs[index], recoveredAt, observedGapMs: gapMs };
-    await chrome.storage.local.set({ [HANG_KEY]: hangs });
+    await api.storage.local.set({ [HANG_KEY]: hangs });
   } catch {
     // Best effort.
   }
 }
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+api.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== "bcg:perf-heartbeat" || !sender.tab?.id) return;
   const payload = message.payload || {};
   const key = watchKey(sender, payload);
