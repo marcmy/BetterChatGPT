@@ -84,6 +84,7 @@
       debug: false,
       notifications: true,
       performanceHangRecorder: true,
+      nativeToolFreezeGuard: true,
     },
   });
 
@@ -248,6 +249,7 @@
     merged.advanced.debug = Boolean(merged.advanced.debug);
     merged.advanced.notifications = Boolean(merged.advanced.notifications);
     merged.advanced.performanceHangRecorder = Boolean(merged.advanced.performanceHangRecorder);
+    merged.advanced.nativeToolFreezeGuard = Boolean(merged.advanced.nativeToolFreezeGuard);
     return merged;
   }
 
@@ -487,8 +489,8 @@
     } catch {
       // Ignore private-mode storage failures.
     }
-    notify(disabled ? "Better ChatGPT disabled on this tab. Reloading…" : "Better ChatGPT enabled. Reloading…");
-    setTimeout(() => location.reload(), 120);
+    notify(disabled ? "Better ChatGPT disabled on this tab." : "Better ChatGPT enabled on this tab.");
+    dispatchSettingsChanged("tab-disabled");
   }
 
   function isFeatureEnabled(path) {
@@ -598,6 +600,7 @@
       needsReload: document.documentElement.dataset.bcgNeedsReload === "1",
       browserSync: syncStatus,
       performanceHangRecorder: Boolean(settings.advanced.performanceHangRecorder),
+      nativeToolFreezeGuard: Boolean(settings.advanced.nativeToolFreezeGuard),
     };
   }
 
@@ -624,6 +627,7 @@
       },
       queueRuntime: typeof apiObject.queueDiagnostics === "function" ? clone(apiObject.queueDiagnostics()) : null,
       performance: apiObject.performanceDiagnostics?.getReport?.() || null,
+      nativeToolFreezeGuard: apiObject.nativeToolFreezeGuard?.status?.() || null,
       recentErrors: clone(diagnostics),
       bridgeTrace: clone(bridgeTrace),
     };
@@ -772,7 +776,7 @@
           description: "Keep native ChatGPT UI state predictable and reduce friction between devices.",
           fullWidth: true,
           fields: [
-            setting("navigation.persistSidebarSections", "Remember sidebar sections", "checkbox", "Restore whether Pinned, Projects, and Chats were expanded or collapsed."),
+            setting("navigation.persistSidebarSections", "Remember sidebar sections", "checkbox", "Restore whether Projects and Chats were expanded or collapsed. Pinned is left to ChatGPT because its native control can open a floating panel in some layouts."),
             setting("navigation.projectDoubleClickHome", "Double-click Project home", "checkbox", "Double-click a project in the sidebar to open its native Project home action."),
             setting("resilience.crossDeviceGuard", "Cross-device stale-chat guard", "checkbox", "Detect when another device advanced the current conversation and refresh before this tab can send from an outdated parent."),
           ],
@@ -901,7 +905,7 @@
     {
       id: "uploads",
       title: "Uploads & Queue",
-      description: "Manage queued follow-ups and edited-message attachments.",
+      description: "Manage attachment-upload queueing and edited-message attachments.",
       icon: "↑",
       badge: "NEW",
       resetPaths: [
@@ -910,11 +914,11 @@
       ],
       groups: [
         {
-          title: "Queued follow-ups",
-          description: "Prepare another message while ChatGPT is still responding.",
+          title: "Attachment upload queue",
+          description: "Press Send while a file is still uploading; Better ChatGPT sends once ChatGPT finishes the upload.",
           fields: [
-            setting("queue.enabled", "Queued sending", "checkbox", "Queue genuine follow-up messages while a response is active."),
-            setting("queue.visuallyEnableSend", "Show Send as actionable", "checkbox", "Keep the Send button visually available for queueing."),
+            setting("queue.enabled", "Queue Send during uploads", "checkbox", "Remember a Send attempt made during an active attachment upload and release it as soon as ChatGPT's native Send becomes available."),
+            setting("queue.visuallyEnableSend", "Show Send while uploading", "checkbox", "Keep Send visually actionable while an attachment is uploading so you can queue it before the upload finishes."),
           ],
         },
         {
@@ -941,6 +945,7 @@
           fields: [
             setting("advanced.notifications", "Notifications", "checkbox", "Show Better ChatGPT status toasts."),
             setting("advanced.performanceHangRecorder", "Native hang recorder", "checkbox", "Record low-overhead timing, memory, DOM-count, and long-frame diagnostics for ChatGPT freezes. Stays active when Master enable is off so the native UI can be tested without Better ChatGPT features."),
+            setting("advanced.nativeToolFreezeGuard", "Native tool freeze guard", "checkbox", "During tool-heavy generation, isolate tool layout work and skip offscreen conversation/tool rendering while protecting the active tail and interactive tool surfaces. Disable this independently if a native tool UI behaves incorrectly; the hang recorder can remain enabled."),
             setting("advanced.debug", "Debug logging", "checkbox", "Record additional console and bridge diagnostics."),
           ],
         },
@@ -2120,7 +2125,6 @@
       } else if (command === "bcg:toggle-enabled") {
         updateSettings({ enabled: !settings.enabled });
         sendResponse({ ok: true, status: getStatus() });
-        setTimeout(() => location.reload(), 120);
       } else if (command === "bcg:toggle-tab") {
         setTabDisabled(!isTabDisabled());
         sendResponse({ ok: true });
@@ -4219,7 +4223,7 @@ html[${SIDEBAR_ATTRIBUTE}="1"] :is(
   if (!BCG) return;
 
   const STORAGE_KEY = "better-chatgpt:sidebar-sections-v1";
-  const SECTION_NAMES = new Set(["pinned", "projects", "chats"]);
+  const SECTION_NAMES = new Set(["projects", "chats"]);
   const RESTORE_DELAYS = [0, 120, 350, 800, 1600, 3000];
   let restoreGeneration = 0;
 
@@ -4227,10 +4231,18 @@ html[${SIDEBAR_ATTRIBUTE}="1"] :is(
     return String(node?.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
   }
 
+  function isTransientSidebarLayer(node) {
+    return Boolean(node?.closest?.(
+      '[role="dialog"], [role="menu"], [role="tooltip"], [data-radix-popper-content-wrapper], [data-floating-ui-portal], [data-headlessui-portal]',
+    ));
+  }
+
   function sectionName(button) {
+    if (isTransientSidebarLayer(button)) return "";
     const text = normalizedText(button);
+    const ariaLabel = String(button?.getAttribute?.("aria-label") || "").replace(/\s+/g, " ").trim().toLowerCase();
     for (const name of SECTION_NAMES) {
-      if (text === name || text.startsWith(`${name} `)) return name;
+      if (text === name || ariaLabel === name) return name;
     }
     return "";
   }
@@ -6318,21 +6330,41 @@ if (globalThis.BetterChatGPT) {
 
       function attachmentTransactionActive() {
         const activeUpload = hasActiveNativeUpload();
-        const uploadHintWhileSettling = hasNativePayloadIntent() && (activeUpload || isNativeComposerBusy());
-        const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();
+        const uploadHintWhileSettling = hasNativePayloadIntent() && isNativeComposerBusy();
+        return Boolean(activeUpload || uploadHintWhileSettling);
+      }
 
-        return Boolean(
-          activeUpload ||
-          uploadHintWhileSettling ||
-          liveFollowUpPreview ||
-          queuedComposerFiles.length > 0
-        );
+      function relinquishQueueToNativeSend() {
+        if (!queued) return;
+        clearQueuedSendAttempt();
+        internalQueuedSendClick = false;
+        if (queuedBridgeNonce) {
+          try {
+            followUpBridge()?.clearSubmit?.(queuedBridgeNonce);
+          } catch (error) {
+            log("failed to disarm queued follow-up bridge during native handoff", error);
+          }
+          queuedBridgeNonce = "";
+        }
+        queued = false;
+        queuedAt = 0;
+        clearMonitor();
+        clearNativePayloadHint();
+        clearQueuedComposerFiles();
+        if (visuallyOverriddenButton) clearVisualOverride(visuallyOverriddenButton);
+        else clearSendProxy();
+        globalThis.BetterChatGPT?.recordTrace?.("queue-native-send-handoff", {});
+        log("queue relinquished to native Send");
       }
 
       function shouldInterceptSendGesture() {
         if (!queueFeatureEnabled() || internalQueuedSendClick) return false;
         if (!probablyHasSomethingToSend()) return false;
-        return queued || attachmentTransactionActive() || !canSendNow();
+        if (attachmentTransactionActive()) return true;
+        // Queueing exists only to bridge an attachment upload. Once no upload is
+        // active, ChatGPT owns the send gesture completely—even during generation.
+        if (queued) relinquishQueueToNativeSend();
+        return false;
       }
 
       function clearQueuedSendAttempt() {
@@ -6447,7 +6479,7 @@ if (globalThis.BetterChatGPT) {
           return;
         }
 
-        if (!queuedSendAttempt && canSendNow()) {
+        if (!queuedSendAttempt && !attachmentTransactionActive() && canSendNow()) {
           sendNow();
         }
       }
@@ -6467,6 +6499,11 @@ if (globalThis.BetterChatGPT) {
 
       function queueSend(source) {
         if (!queueFeatureEnabled()) return false;
+        if (!attachmentTransactionActive()) {
+          if (queued) relinquishQueueToNativeSend();
+          scheduleCheck();
+          return false;
+        }
         if (!probablyHasSomethingToSend()) {
           log("not queueing; composer looks empty");
           return false;
@@ -8563,6 +8600,7 @@ if (globalThis.BetterChatGPT) {
   }
 
   function sendHeartbeat(metrics) {
+    const guardStatus = BCG.nativeToolFreezeGuard?.status?.() || null;
     const api = extensionApi();
     if (!api?.runtime?.sendMessage) return;
     try {
@@ -8573,6 +8611,16 @@ if (globalThis.BetterChatGPT) {
           at: Date.now(),
           path: safePath(),
           ...metrics,
+          guardActive: Boolean(guardStatus?.active),
+          guardHeavy: Boolean(guardStatus?.heavy),
+          guardRehydrating: Boolean(guardStatus?.rehydrating),
+          guardRehydrateReason: String(guardStatus?.rehydrateReason || "").slice(0, 40),
+          guardRehydrateRemainingMs: Number(guardStatus?.rehydrateRemainingMs || 0),
+          guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),
+          guardObservedToolSurfaces: Number(guardStatus?.observedToolCount || 0),
+          guardContainedTools: Number(guardStatus?.containedToolCount || 0),
+          guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),
+          guardSkippedTurns: Number(guardStatus?.skippedTurnCount || 0),
         },
       });
       result?.catch?.(() => {});
