@@ -79,6 +79,12 @@ requireText(content, 'if (queued) relinquishQueueToNativeSend();', "stale queue 
 requireText(content, 'if (!attachmentTransactionActive()) {', "queueSend refuses non-upload queueing");
 forbidText(content, 'return queued || attachmentTransactionActive() || !canSendNow();', "generation/native-disabled state cannot queue plain text");
 forbidText(content, 'const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();', "generation preview is not an upload transaction");
+requireText(content, 'title: \"Attachment upload queue\"', 'settings describe attachment upload queue');
+requireText(content, 'setting(\"queue.enabled\", \"Queue Send during uploads\"', 'upload-only queue setting label');
+requireText(content, 'setting(\"queue.visuallyEnableSend\", \"Show Send while uploading\"', 'upload-only send affordance label');
+forbidText(content, 'title: \"Queued follow-ups\"', 'obsolete follow-up queue settings title');
+forbidText(content, 'Prepare another message while ChatGPT is still responding.', 'obsolete follow-up queue description');
+forbidText(content, 'Queue genuine follow-up messages while a response is active.', 'obsolete generation-based queue description');
 requireText(guard, 'observedToolCount = document.querySelectorAll(TOOL_SELECTOR).length;', "guard pressure uses recorder marker count");
 requireText(guard, 'const toolPressureCount = Math.max(markedToolCount, observedToolCount);', "guard can engage before strict classifier");
 requireText(guard, 'extendRehydrateForMutation();', "rehydration extends while DOM materializes");

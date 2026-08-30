@@ -905,7 +905,7 @@
     {
       id: "uploads",
       title: "Uploads & Queue",
-      description: "Manage queued follow-ups and edited-message attachments.",
+      description: "Manage attachment-upload queueing and edited-message attachments.",
       icon: "↑",
       badge: "NEW",
       resetPaths: [
@@ -914,11 +914,11 @@
       ],
       groups: [
         {
-          title: "Queued follow-ups",
-          description: "Prepare another message while ChatGPT is still responding.",
+          title: "Attachment upload queue",
+          description: "Press Send while a file is still uploading; Better ChatGPT sends once ChatGPT finishes the upload.",
           fields: [
-            setting("queue.enabled", "Queued sending", "checkbox", "Queue genuine follow-up messages while a response is active."),
-            setting("queue.visuallyEnableSend", "Show Send as actionable", "checkbox", "Keep the Send button visually available for queueing."),
+            setting("queue.enabled", "Queue Send during uploads", "checkbox", "Remember a Send attempt made during an active attachment upload and release it as soon as ChatGPT's native Send becomes available."),
+            setting("queue.visuallyEnableSend", "Show Send while uploading", "checkbox", "Keep Send visually actionable while an attachment is uploading so you can queue it before the upload finishes."),
           ],
         },
         {
