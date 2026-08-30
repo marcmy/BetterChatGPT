@@ -1,0 +1,113 @@
+name: Fix PR1 upload queue settings wording
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pr1-settings-copy.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/native-tool-freeze-guard
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Fix queue settings copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          p = Path('chromium/content.js')
+          text = p.read_text(encoding='utf-8')
+          old = '''      description: "Manage queued follow-ups and edited-message attachments.",
+'''
+          new = '''      description: "Manage attachment-upload queueing and edited-message attachments.",
+'''
+          text = replace_once(text, old, new, 'uploads section description')
+
+          old = '''          title: "Queued follow-ups",
+          description: "Prepare another message while ChatGPT is still responding.",
+          fields: [
+            setting("queue.enabled", "Queued sending", "checkbox", "Queue genuine follow-up messages while a response is active."),
+            setting("queue.visuallyEnableSend", "Show Send as actionable", "checkbox", "Keep the Send button visually available for queueing."),
+'''
+          new = '''          title: "Attachment upload queue",
+          description: "Press Send while a file is still uploading; Better ChatGPT sends once ChatGPT finishes the upload.",
+          fields: [
+            setting("queue.enabled", "Queue Send during uploads", "checkbox", "Remember a Send attempt made during an active attachment upload and release it as soon as ChatGPT's native Send becomes available."),
+            setting("queue.visuallyEnableSend", "Show Send while uploading", "checkbox", "Keep Send visually actionable while an attachment is uploading so you can queue it before the upload finishes."),
+'''
+          text = replace_once(text, old, new, 'upload queue settings group')
+          p.write_text(text, encoding='utf-8')
+
+          p = Path('tools/regression-check.mjs')
+          checks = p.read_text(encoding='utf-8')
+          anchor = "forbidText(content, 'const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();', \"generation preview is not an upload transaction\");\n"
+          addition = anchor + '''requireText(content, 'title: "Attachment upload queue"', "settings describe attachment upload queue");
+requireText(content, 'setting("queue.enabled", "Queue Send during uploads"', "upload-only queue setting label");
+requireText(content, 'setting("queue.visuallyEnableSend", "Show Send while uploading"', "upload-only send affordance label");
+forbidText(content, 'title: "Queued follow-ups"', "obsolete follow-up queue settings title");
+forbidText(content, 'Prepare another message while ChatGPT is still responding.', "obsolete follow-up queue description");
+forbidText(content, 'Queue genuine follow-up messages while a response is active.', "obsolete generation-based queue description");
+'''
+          checks = replace_once(checks, anchor, addition, 'queue settings wording regression checks')
+          p.write_text(checks, encoding='utf-8')
+          PY
+
+      - name: Validate Chromium/shared source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/regression-check.mjs
+          find chromium -type f -name '*.js' -print0 | while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
+          git diff --check
+
+      - name: Commit and push PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add chromium/content.js tools/regression-check.mjs
+          git diff --cached --check
+          git commit -m 'Describe queued send as attachment-upload-only'
+          git push origin HEAD:fix/native-tool-freeze-guard
+
+      - name: Package Chromium test build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f BetterChatGPT-chromium-pr1-upload-queue-copy-pre2-test.zip
+          (cd chromium && zip -qr ../BetterChatGPT-chromium-pr1-upload-queue-copy-pre2-test.zip .)
+          unzip -t BetterChatGPT-chromium-pr1-upload-queue-copy-pre2-test.zip >/dev/null
+          sha256sum BetterChatGPT-chromium-pr1-upload-queue-copy-pre2-test.zip
+
+      - name: Upload Chromium test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: BetterChatGPT-chromium-pr1-upload-queue-copy-pre2-test
+          path: BetterChatGPT-chromium-pr1-upload-queue-copy-pre2-test.zip
+          if-no-files-found: error
