@@ -34,46 +34,29 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          def replace_once(text, old, new, label):
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f"{label}: expected one match, found {count}")
-              return text.replace(old, new, 1)
-
           p = Path('chromium/content.js')
           text = p.read_text(encoding='utf-8')
-          old = '''      description: "Manage queued follow-ups and edited-message attachments.",
-'''
-          new = '''      description: "Manage attachment-upload queueing and edited-message attachments.",
-'''
-          text = replace_once(text, old, new, 'uploads section description')
-
-          old = '''          title: "Queued follow-ups",
-          description: "Prepare another message while ChatGPT is still responding.",
-          fields: [
-            setting("queue.enabled", "Queued sending", "checkbox", "Queue genuine follow-up messages while a response is active."),
-            setting("queue.visuallyEnableSend", "Show Send as actionable", "checkbox", "Keep the Send button visually available for queueing."),
-'''
-          new = '''          title: "Attachment upload queue",
-          description: "Press Send while a file is still uploading; Better ChatGPT sends once ChatGPT finishes the upload.",
-          fields: [
-            setting("queue.enabled", "Queue Send during uploads", "checkbox", "Remember a Send attempt made during an active attachment upload and release it as soon as ChatGPT's native Send becomes available."),
-            setting("queue.visuallyEnableSend", "Show Send while uploading", "checkbox", "Keep Send visually actionable while an attachment is uploading so you can queue it before the upload finishes."),
-'''
-          text = replace_once(text, old, new, 'upload queue settings group')
+          replacements = [
+              ('      description: "Manage queued follow-ups and edited-message attachments.",', '      description: "Manage attachment-upload queueing and edited-message attachments.",'),
+              ('          title: "Queued follow-ups",', '          title: "Attachment upload queue",'),
+              ('          description: "Prepare another message while ChatGPT is still responding.",', '          description: "Press Send while a file is still uploading; Better ChatGPT sends once ChatGPT finishes the upload.",'),
+              ('            setting("queue.enabled", "Queued sending", "checkbox", "Queue genuine follow-up messages while a response is active."),', '            setting("queue.enabled", "Queue Send during uploads", "checkbox", "Remember a Send attempt made during an active attachment upload and release it as soon as ChatGPT\'s native Send becomes available."),'),
+              ('            setting("queue.visuallyEnableSend", "Show Send as actionable", "checkbox", "Keep the Send button visually available for queueing."),', '            setting("queue.visuallyEnableSend", "Show Send while uploading", "checkbox", "Keep Send visually actionable while an attachment is uploading so you can queue it before the upload finishes."),'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'expected one settings-copy match, found {count}: {old}')
+              text = text.replace(old, new, 1)
           p.write_text(text, encoding='utf-8')
 
           p = Path('tools/regression-check.mjs')
           checks = p.read_text(encoding='utf-8')
           anchor = "forbidText(content, 'const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();', \"generation preview is not an upload transaction\");\n"
-          addition = anchor + '''requireText(content, 'title: "Attachment upload queue"', "settings describe attachment upload queue");
-requireText(content, 'setting("queue.enabled", "Queue Send during uploads"', "upload-only queue setting label");
-requireText(content, 'setting("queue.visuallyEnableSend", "Show Send while uploading"', "upload-only send affordance label");
-forbidText(content, 'title: "Queued follow-ups"', "obsolete follow-up queue settings title");
-forbidText(content, 'Prepare another message while ChatGPT is still responding.', "obsolete follow-up queue description");
-forbidText(content, 'Queue genuine follow-up messages while a response is active.', "obsolete generation-based queue description");
-'''
-          checks = replace_once(checks, anchor, addition, 'queue settings wording regression checks')
+          assertions = "requireText(content, 'title: \\\"Attachment upload queue\\\"', \\\"settings describe attachment upload queue\\\");\nrequireText(content, 'setting(\\\"queue.enabled\\\", \\\"Queue Send during uploads\\\"', \\\"upload-only queue setting label\\\");\nrequireText(content, 'setting(\\\"queue.visuallyEnableSend\\\", \\\"Show Send while uploading\\\"', \\\"upload-only send affordance label\\\");\nforbidText(content, 'title: \\\"Queued follow-ups\\\"', \\\"obsolete follow-up queue settings title\\\");\nforbidText(content, 'Prepare another message while ChatGPT is still responding.', \\\"obsolete follow-up queue description\\\");\nforbidText(content, 'Queue genuine follow-up messages while a response is active.', \\\"obsolete generation-based queue description\\\");\n"
+          if checks.count(anchor) != 1:
+              raise RuntimeError('queue regression insertion anchor missing')
+          checks = checks.replace(anchor, anchor + assertions, 1)
           p.write_text(checks, encoding='utf-8')
           PY
 
