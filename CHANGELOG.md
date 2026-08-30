@@ -2,6 +2,8 @@
 
 ## 1.1-pre.2 - 2026-08-29
 
+- Correct **Queued Send** semantics: BetterChatGPT now queues only while a native attachment upload/settle transaction is active. Generation state, a disabled native Send button, a staged attachment preview, or a stale internal queued flag can no longer intercept a normal text/native send.
+- Align Native tool freeze guard pressure detection with the hang recorder's broad tool-marker count, and keep rehydration prewarm alive while the returning conversation DOM is still materializing (bounded to 15 seconds) instead of expiring on a fixed 3-second race.
 - Keep hyperlinks inside colored user bubbles on the browser-native blue link color instead of inheriting BetterChatGPT text colors.
 - Make all regular settings, profiles, imports, and section resets apply on-the-fly without requiring a ChatGPT reload. Master enable now suspends/resumes feature runtimes live; the Native hang recorder remains intentionally independent for A/B diagnostics.
 - Make Smart scrolling, Queued sending, plain-text paste/copy, and edited-message attachment enhancement react to settings changes without page reloads.

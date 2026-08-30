@@ -15,10 +15,12 @@
   const PROTECTED_TAIL_TURNS = 3;
   const SCAN_DELAY_MS = 100;
   const REHYDRATE_WINDOW_MS = 3000;
+  const REHYDRATE_MUTATION_EXTEND_MS = 1800;
+  const REHYDRATE_MAX_MS = 15000;
   const HEAVY_RELEASE_GRACE_MS = 2000;
   const NEAR_VIEWPORT_MARGIN_PX = 1600;
 
-  const TURN_SELECTOR = 'article[data-testid^="conversation-turn"]';
+  const TURN_SELECTOR = ':is(article[data-testid^="conversation-turn"], [data-message-author-role])';
   const TOOL_SELECTOR = [
     '[data-testid*="tool" i]',
     '[data-testid*="connector" i]',
@@ -41,11 +43,13 @@
   let scanTimer = 0;
   let rehydrateTimer = 0;
   let rehydrateUntil = 0;
+  let rehydrateStartedAt = 0;
   let rehydrateReason = "";
   let lastRouteKey = `${location.pathname}${location.search}`;
   let active = false;
   let heavy = false;
   let markedToolCount = 0;
+  let observedToolCount = 0;
   let containedToolCount = 0;
   let skippedToolCount = 0;
   let skippedTurnCount = 0;
@@ -75,36 +79,62 @@
     return active && (rehydrateUntil === Number.POSITIVE_INFINITY || performance.now() < rehydrateUntil);
   }
 
+  function scheduleRehydrateFinish() {
+    window.clearTimeout(rehydrateTimer);
+    rehydrateTimer = 0;
+    if (!active || !Number.isFinite(rehydrateUntil) || rehydrateUntil <= 0) return;
+    rehydrateTimer = window.setTimeout(
+      finishRehydrate,
+      Math.max(50, Math.round(rehydrateUntil - performance.now()) + 50),
+    );
+  }
+
   function finishRehydrate() {
     if (!active || rehydrateUntil === Number.POSITIVE_INFINITY) return;
-    if (performance.now() < rehydrateUntil) return;
+    if (performance.now() < rehydrateUntil) {
+      scheduleRehydrateFinish();
+      return;
+    }
     rehydrateUntil = 0;
+    rehydrateStartedAt = 0;
     document.documentElement.removeAttribute(ROOT_REHYDRATE_ATTR);
     refreshState();
     BCG.recordTrace?.("native-tool-freeze-guard-rehydrate-done", {
       reason: rehydrateReason,
       toolSurfaces: trackedTools.size,
+      observedToolSurfaces: observedToolCount,
       containedTools: containedToolCount,
       skippedTools: skippedToolCount,
       skippedTurns: skippedTurnCount,
     });
   }
 
+  function extendRehydrateForMutation() {
+    if (!isRehydrating() || !Number.isFinite(rehydrateUntil) || !rehydrateStartedAt) return;
+    const now = performance.now();
+    const maxUntil = rehydrateStartedAt + REHYDRATE_MAX_MS;
+    const nextUntil = Math.min(maxUntil, now + REHYDRATE_MUTATION_EXTEND_MS);
+    if (nextUntil <= rehydrateUntil) return;
+    rehydrateUntil = nextUntil;
+    scheduleRehydrateFinish();
+  }
+
   function enterRehydrate(reason, { holdWhileHidden = false } = {}) {
     if (!active) return;
     const wasRehydrating = isRehydrating();
+    const now = performance.now();
     rehydrateReason = String(reason || "resume");
     window.clearTimeout(rehydrateTimer);
     rehydrateTimer = 0;
-    rehydrateUntil = holdWhileHidden ? Number.POSITIVE_INFINITY : performance.now() + REHYDRATE_WINDOW_MS;
+    rehydrateStartedAt = now;
+    rehydrateUntil = holdWhileHidden ? Number.POSITIVE_INFINITY : now + REHYDRATE_WINDOW_MS;
     document.documentElement.setAttribute(ROOT_REHYDRATE_ATTR, "1");
-    if (!holdWhileHidden) {
-      rehydrateTimer = window.setTimeout(finishRehydrate, REHYDRATE_WINDOW_MS + 50);
-    }
+    if (!holdWhileHidden) scheduleRehydrateFinish();
     if (!wasRehydrating) {
       BCG.recordTrace?.("native-tool-freeze-guard-rehydrate", {
         reason: rehydrateReason,
         windowMs: holdWhileHidden ? null : REHYDRATE_WINDOW_MS,
+        maxWindowMs: holdWhileHidden ? null : REHYDRATE_MAX_MS,
         toolSurfaces: trackedTools.size,
       });
     }
@@ -136,6 +166,17 @@
       html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TURN_SKIP_CLASS} {
         content-visibility: auto;
         contain-intrinsic-size: auto 720px;
+      }
+
+      html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] ${TURN_SELECTOR} :is(
+        [data-testid*="tool" i]:not(button):not(a):not(input):not(textarea):not(select),
+        [data-testid*="connector" i]:not(button):not(a):not(input):not(textarea):not(select),
+        [data-testid*="mcp" i]:not(button):not(a):not(input):not(textarea):not(select),
+        [data-testid*="work" i]:not(button):not(a):not(input):not(textarea):not(select),
+        iframe[src*="mcp" i],
+        iframe[title*="tool" i]
+      ) {
+        contain: layout;
       }
 
       html[${ROOT_ACTIVE_ATTR}="1"][${ROOT_HEAVY_ATTR}="1"] .${TOOL_CONTAIN_CLASS} {
@@ -313,9 +354,17 @@
     if (!active) return;
     for (const tool of Array.from(trackedTools)) if (!tool.isConnected) untrackTool(tool);
     markedToolCount = trackedTools.size;
+    try {
+      // Deliberately identical to the Native hang recorder's broad marker count.
+      // This is the pressure signal; actual containment remains message-scoped.
+      observedToolCount = document.querySelectorAll(TOOL_SELECTOR).length;
+    } catch {
+      observedToolCount = markedToolCount;
+    }
+    const toolPressureCount = Math.max(markedToolCount, observedToolCount);
     const now = performance.now();
     const rehydrateGrace = Number.isFinite(rehydrateUntil) && now < rehydrateUntil + HEAVY_RELEASE_GRACE_MS;
-    const nextHeavy = markedToolCount >= HEAVY_TOOL_THRESHOLD
+    const nextHeavy = toolPressureCount >= HEAVY_TOOL_THRESHOLD
       && (generationActive() || isRehydrating() || rehydrateGrace);
     const heavyChanged = heavy !== nextHeavy;
     if (heavyChanged) {
@@ -327,6 +376,7 @@
     if (heavyChanged) {
       BCG.recordTrace?.(heavy ? "native-tool-freeze-guard-heavy" : "native-tool-freeze-guard-normal", {
         toolSurfaces: markedToolCount,
+        observedToolSurfaces: observedToolCount,
         toolSurfaceLabels: heavy ? toolSurfaceLabels() : [],
         containedTools: containedToolCount,
         skippedTools: skippedToolCount,
@@ -379,7 +429,10 @@
         if (record.addedNodes.length || record.removedNodes.length) changed = true;
         for (const node of record.addedNodes) if (node instanceof Element) enqueueRoot(node);
       }
-      if (changed) scheduleScan();
+      if (changed) {
+        extendRehydrateForMutation();
+        scheduleScan();
+      }
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
   }
@@ -450,10 +503,12 @@
     scanTimer = 0;
     rehydrateTimer = 0;
     rehydrateUntil = 0;
+    rehydrateStartedAt = 0;
     rehydrateReason = "";
     pendingRoots.clear();
     heavy = false;
     markedToolCount = 0;
+    observedToolCount = 0;
     containedToolCount = 0;
     skippedToolCount = 0;
     skippedTurnCount = 0;
@@ -504,6 +559,7 @@
         rehydrateReason,
         rehydrateRemainingMs: remaining,
         markedToolCount: trackedTools.size,
+        observedToolCount,
         containedToolCount,
         skippedToolCount,
         skippedTurnCount,

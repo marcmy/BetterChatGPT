@@ -58,6 +58,7 @@ function heartbeatSnapshot(payload, now) {
     guardRehydrateReason: String(payload.guardRehydrateReason || "").slice(0, 40),
     guardRehydrateRemainingMs: Number(payload.guardRehydrateRemainingMs || 0),
     guardToolSurfaces: Number(payload.guardToolSurfaces || 0),
+    guardObservedToolSurfaces: Number(payload.guardObservedToolSurfaces || 0),
     guardContainedTools: Number(payload.guardContainedTools || 0),
     guardSkippedTools: Number(payload.guardSkippedTools || 0),
     guardSkippedTurns: Number(payload.guardSkippedTurns || 0),

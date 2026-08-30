@@ -6330,21 +6330,41 @@ if (globalThis.BetterChatGPT) {
 
       function attachmentTransactionActive() {
         const activeUpload = hasActiveNativeUpload();
-        const uploadHintWhileSettling = hasNativePayloadIntent() && (activeUpload || isNativeComposerBusy());
-        const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();
+        const uploadHintWhileSettling = hasNativePayloadIntent() && isNativeComposerBusy();
+        return Boolean(activeUpload || uploadHintWhileSettling);
+      }
 
-        return Boolean(
-          activeUpload ||
-          uploadHintWhileSettling ||
-          liveFollowUpPreview ||
-          queuedComposerFiles.length > 0
-        );
+      function relinquishQueueToNativeSend() {
+        if (!queued) return;
+        clearQueuedSendAttempt();
+        internalQueuedSendClick = false;
+        if (queuedBridgeNonce) {
+          try {
+            followUpBridge()?.clearSubmit?.(queuedBridgeNonce);
+          } catch (error) {
+            log("failed to disarm queued follow-up bridge during native handoff", error);
+          }
+          queuedBridgeNonce = "";
+        }
+        queued = false;
+        queuedAt = 0;
+        clearMonitor();
+        clearNativePayloadHint();
+        clearQueuedComposerFiles();
+        if (visuallyOverriddenButton) clearVisualOverride(visuallyOverriddenButton);
+        else clearSendProxy();
+        globalThis.BetterChatGPT?.recordTrace?.("queue-native-send-handoff", {});
+        log("queue relinquished to native Send");
       }
 
       function shouldInterceptSendGesture() {
         if (!queueFeatureEnabled() || internalQueuedSendClick) return false;
         if (!probablyHasSomethingToSend()) return false;
-        return queued || attachmentTransactionActive() || !canSendNow();
+        if (attachmentTransactionActive()) return true;
+        // Queueing exists only to bridge an attachment upload. Once no upload is
+        // active, ChatGPT owns the send gesture completely—even during generation.
+        if (queued) relinquishQueueToNativeSend();
+        return false;
       }
 
       function clearQueuedSendAttempt() {
@@ -6459,7 +6479,7 @@ if (globalThis.BetterChatGPT) {
           return;
         }
 
-        if (!queuedSendAttempt && canSendNow()) {
+        if (!queuedSendAttempt && !attachmentTransactionActive() && canSendNow()) {
           sendNow();
         }
       }
@@ -6479,6 +6499,11 @@ if (globalThis.BetterChatGPT) {
 
       function queueSend(source) {
         if (!queueFeatureEnabled()) return false;
+        if (!attachmentTransactionActive()) {
+          if (queued) relinquishQueueToNativeSend();
+          scheduleCheck();
+          return false;
+        }
         if (!probablyHasSomethingToSend()) {
           log("not queueing; composer looks empty");
           return false;
@@ -8592,6 +8617,7 @@ if (globalThis.BetterChatGPT) {
           guardRehydrateReason: String(guardStatus?.rehydrateReason || "").slice(0, 40),
           guardRehydrateRemainingMs: Number(guardStatus?.rehydrateRemainingMs || 0),
           guardToolSurfaces: Number(guardStatus?.markedToolCount || 0),
+          guardObservedToolSurfaces: Number(guardStatus?.observedToolCount || 0),
           guardContainedTools: Number(guardStatus?.containedToolCount || 0),
           guardSkippedTools: Number(guardStatus?.skippedToolCount || 0),
           guardSkippedTurns: Number(guardStatus?.skippedTurnCount || 0),

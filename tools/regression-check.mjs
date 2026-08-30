@@ -73,6 +73,18 @@ requireText(content, 'if (!globalThis.BetterChatGPT?.isFeatureEnabled?.("compose
 requireText(content, 'bcg:native-upload-count', "native upload completion tracking");
 requireText(content, 'rememberQueuedComposerFiles', "queued attachment correlation");
 requireText(content, 'if (hasActiveNativeUpload() || isNativeComposerBusy()) return false;', "do not send during native upload");
+requireText(content, 'return Boolean(activeUpload || uploadHintWhileSettling);', "queue is attachment-upload-only");
+requireText(content, 'if (attachmentTransactionActive()) return true;', "only active attachment transaction intercepts send gesture");
+requireText(content, 'if (queued) relinquishQueueToNativeSend();', "stale queue relinquishes to native send");
+requireText(content, 'if (!attachmentTransactionActive()) {', "queueSend refuses non-upload queueing");
+forbidText(content, 'return queued || attachmentTransactionActive() || !canSendNow();', "generation/native-disabled state cannot queue plain text");
+forbidText(content, 'const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();', "generation preview is not an upload transaction");
+requireText(guard, 'observedToolCount = document.querySelectorAll(TOOL_SELECTOR).length;', "guard pressure uses recorder marker count");
+requireText(guard, 'const toolPressureCount = Math.max(markedToolCount, observedToolCount);', "guard can engage before strict classifier");
+requireText(guard, 'extendRehydrateForMutation();', "rehydration extends while DOM materializes");
+requireText(guard, 'const REHYDRATE_MAX_MS = 15000;', "rehydration extension is bounded");
+requireText(content, 'guardObservedToolSurfaces', "heartbeat exposes recorder-aligned guard pressure");
+requireText(perfBackground, 'guardObservedToolSurfaces', "flight recorder retains guard pressure count");
 
 forbidText(bridge, '/file|library|mention|search/i', "generic search-response metadata parsing");
 forbidText(bridge, '/file|upload|attachment|library|mention|search/i', "generic XHR search-response metadata parsing");
