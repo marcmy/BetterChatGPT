@@ -53,7 +53,14 @@ jobs:
           p = Path('tools/regression-check.mjs')
           checks = p.read_text(encoding='utf-8')
           anchor = "forbidText(content, 'const liveFollowUpPreview = isAssistantGenerating() && hasVisibleAttachmentPreview();', \"generation preview is not an upload transaction\");\n"
-          assertions = "requireText(content, 'title: \\\"Attachment upload queue\\\"', \\\"settings describe attachment upload queue\\\");\nrequireText(content, 'setting(\\\"queue.enabled\\\", \\\"Queue Send during uploads\\\"', \\\"upload-only queue setting label\\\");\nrequireText(content, 'setting(\\\"queue.visuallyEnableSend\\\", \\\"Show Send while uploading\\\"', \\\"upload-only send affordance label\\\");\nforbidText(content, 'title: \\\"Queued follow-ups\\\"', \\\"obsolete follow-up queue settings title\\\");\nforbidText(content, 'Prepare another message while ChatGPT is still responding.', \\\"obsolete follow-up queue description\\\");\nforbidText(content, 'Queue genuine follow-up messages while a response is active.', \\\"obsolete generation-based queue description\\\");\n"
+          assertions = (
+              "requireText(content, 'title: \\\"Attachment upload queue\\\"', 'settings describe attachment upload queue');\n"
+              "requireText(content, 'setting(\\\"queue.enabled\\\", \\\"Queue Send during uploads\\\"', 'upload-only queue setting label');\n"
+              "requireText(content, 'setting(\\\"queue.visuallyEnableSend\\\", \\\"Show Send while uploading\\\"', 'upload-only send affordance label');\n"
+              "forbidText(content, 'title: \\\"Queued follow-ups\\\"', 'obsolete follow-up queue settings title');\n"
+              "forbidText(content, 'Prepare another message while ChatGPT is still responding.', 'obsolete follow-up queue description');\n"
+              "forbidText(content, 'Queue genuine follow-up messages while a response is active.', 'obsolete generation-based queue description');\n"
+          )
           if checks.count(anchor) != 1:
               raise RuntimeError('queue regression insertion anchor missing')
           checks = checks.replace(anchor, anchor + assertions, 1)
